@@ -21,7 +21,7 @@ class Usuario {
 class Empresa {
   +id: int
   +nombre: string
-  +tipo_empresa: string  // "aerolinea" o "bus"
+  +tipo_empresa: string
 }
 
 class Viaje {
@@ -31,16 +31,131 @@ class Viaje {
   +precio: decimal
 }
 
-class Ruta {
+class ViajeTramo {
   +id: int
-  +origen: string
-  +destino: string
+  +viaje_id: int
+  +orden: int
+  +terminal_salida_id: int
+  +terminal_llegada_id: int
+  +hora_salida: datetime
+  +hora_llegada: datetime
 }
 
-Ruta "1" -- "0..*" Viaje : incluye >
-Usuario "1" -- "0..*" Viaje : reserva >
-Viaje "1" --> "1" Estado
-Viaje "1" --> "1" TipoCategoria
-Viaje "1" --> "1" Empresa
+class Reserva {
+  +id: int
+  +id_usuario: int 
+  +id_viaje: int 
+  +fecha_reserva: datetime
+  +estado: string
+}
+
+class Pasajero {
+  +id: int
+  +id_reserva: int 
+  +nombre: string
+  +apellido: string
+  +documento: string
+}
+
+class Asiento {
+  +id: int
+  +id_viaje: int 
+  +numero: string
+  +clase: string
+  +disponible: bool
+}
+
+class Pago {
+  +id: int
+  +id_reserva: int
+  +monto: decimal
+  +metodo: string
+  +estado: string
+  +fecha_pago: datetime
+}
+
+class Ticket {
+  +id: int
+  +reserva_id: int
+  +numero_ticket: string
+  +emitido_en: datetime
+  +estado: string
+}
+
+class Impuesto {
+  +id: int
+  +nombre: string
+  +codigo: string
+  +porcentaje: decimal
+  +fijo_monto: decimal
+  +moneda: string
+}
+
+class CuponDescuento {
+  +id: int
+  +codigo: string
+  +tipo: string
+  +valor: decimal
+  +moneda: string
+  +uso_max: int
+  +uso_actual: int
+  +vigencia_desde: date
+  +vigencia_hasta: date
+  +activo: bool
+}
+
+class Terminal {
+  +id: int
+  +nombre: string
+  +ciudad: string
+  +pais: string
+  +codigo: string
+  +tipo: string
+}
+
+class CabinaClase {
+  +id: int
+  +nombre: string
+  +prioridad: int
+}
+
+class Tarifa {
+  +id: int
+  +codigo: string
+  +nombre: string
+  +cabina_clase_id: int
+  +equipaje_incl_kg: int
+  +cambios: bool
+  +reembolsable: bool
+  +condiciones: text
+}
+
+class Equipo {
+  +id: int
+  +empresa_id: int
+  +tipo: string
+  +modelo: string
+  +matricula: string
+  +capacidad_total: int
+}
+
+class PasajeroAsiento {
+  +id: int
+  +pasajero_id: int
+  +asiento_id: int
+  +fecha_seleccion: datetime
+  +cargo_extra: decimal
+}
+
+class Equipaje {
+  +id: int
+  +pasajero_id: int
+  +tipo: string
+  +peso_kg: decimal
+  +largo_cm: int
+  +ancho_cm: int
+  +alto_cm: int
+  +cargo_extra: decimal
+}
 
 @enduml
