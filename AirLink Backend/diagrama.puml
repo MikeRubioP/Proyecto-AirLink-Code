@@ -1,0 +1,46 @@
+@startuml
+
+class Estado {
+  +id: int
+  +nombre: string
+}
+
+class TipoCategoria {
+  +id: int
+  +nombre: string
+}
+
+class Usuario {
+  +id: int
+  +nombre: string
+  +email: string
+  +contrasena: string
+  +rol: string
+}
+
+class Empresa {
+  +id: int
+  +nombre: string
+  +tipo_empresa: string  // "aerolinea" o "bus"
+}
+
+class Viaje {
+  +id: int
+  +fecha_salida: datetime
+  +fecha_llegada: datetime
+  +precio: decimal
+}
+
+class Ruta {
+  +id: int
+  +origen: string
+  +destino: string
+}
+
+Ruta "1" -- "0..*" Viaje : incluye >
+Usuario "1" -- "0..*" Viaje : reserva >
+Viaje "1" --> "1" Estado
+Viaje "1" --> "1" TipoCategoria
+Viaje "1" --> "1" Empresa
+
+@enduml
