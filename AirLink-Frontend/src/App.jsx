@@ -1,34 +1,30 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { Suspense } from "react";
+import { Routes, Route } from "react-router-dom";
+
+import Navbar from "./Components/Navbar";
+
+import Home from "./Pages/Usuario/Home";
+import Ofertas from "./Pages/Usuario/Ofertas";
+import Cupones from "./Pages/Usuario/Cupones";
+import Contacto from "./Pages/Usuario/Contacto";
+import SobreNosotros from "./Pages/Usuario/SobreNosotros";
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        <Suspense fallback={<div>Cargando...</div>}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/ofertas" element={<Ofertas />} />
+            <Route path="/cupones" element={<Cupones />} />
+            <Route path="/contacto" element={<Contacto />} />
+            <Route path="/sobre-nosotros" element={<SobreNosotros />} />
+          </Routes>
+        </Suspense>
+      </main>
+    </div>
   )
 }
 
