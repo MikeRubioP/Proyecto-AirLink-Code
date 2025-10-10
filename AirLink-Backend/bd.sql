@@ -1,6 +1,12 @@
 CREATE DATABASE Airlink;
 USE Airlink;
 
+ALTER TABLE usuario ADD COLUMN verificado BOOLEAN DEFAULT FALSE AFTER googleId;
+
+INSERT INTO rol (idRol, nombreRol) VALUES (1, 'Cliente');
+INSERT INTO rol (idRol, nombreRol) VALUES (2, 'Usuario');
+INSERT INTO rol (idRol, nombreRol) VALUES (3, 'Administrador');
+
 /*Drops Tables*/
 DROP TABLE pasajero_asiento;
 DROP TABLE equipaje;
