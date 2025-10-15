@@ -1,35 +1,41 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import DestinationCard from "../../Components/DestinationCard";
 
 export default function Home() {
-  const destinos = [
-    { id: 1, nombre: "Valdivia", precio: "$20.000", img: "https://source.unsplash.com/600x400/?valdivia,city" },
-    { id: 2, nombre: "Coquimbo", precio: "$21.000", img: "https://source.unsplash.com/600x400/?coquimbo,chile" },
-    { id: 3, nombre: "Chillán", precio: "$17.000", img: "https://source.unsplash.com/600x400/?chillan,chile" },
-    { id: 4, nombre: "Buenos Aires, Argentina", precio: "$59.000", img: "https://source.unsplash.com/600x400/?buenosaires,argentina" },
-    { id: 5, nombre: "São Paulo, Brasil", precio: "$70.000", img: "https://source.unsplash.com/600x400/?saopaulo,brazil" },
-    { id: 6, nombre: "Lima, Perú", precio: "$29.000", img: "https://source.unsplash.com/600x400/?lima,peru" },
-    { id: 7, nombre: "Ciudad de México, México", precio: "$60.000", img: "https://source.unsplash.com/600x400/?mexico,city" },
-    { id: 8, nombre: "Bogotá, Colombia", precio: "$42.000", img: "https://source.unsplash.com/600x400/?bogota,colombia" },
-    { id: 9, nombre: "Quito, Ecuador", precio: "$37.000", img: "https://source.unsplash.com/600x400/?quito,ecuador" },
-  ];
+  const [destinos, setDestinos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // 🔧 Cambié la ruta de /api/destinos a /destinos
+    fetch('http://localhost:5174/destinos')
+      .then(res => res.json())
+      .then(data => {
+        setDestinos(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Error cargando destinos:', err);
+        setLoading(false);
+      });
+  }, []);
 
   const reseñas = [
     { id: 1, nombre: "John D.", cargo: "Traveler", texto: "El servicio fue excelente, el vuelo cómodo y puntual. ¡Altamente recomendado!", rating: 5 },
-    { id: 2, nombre: "John D.", cargo: "Traveler", texto: "Muy buena experiencia con AirLink, fácil de reservar y excelente atención.", rating: 4 },
-    { id: 3, nombre: "John D.", cargo: "Traveler", texto: "Todo fue rápido y sin complicaciones. Definitivamente volveré a viajar con ellos.", rating: 5 },
+    { id: 2, nombre: "María S.", cargo: "Traveler", texto: "Muy buena experiencia con AirLink, fácil de reservar y excelente atención.", rating: 4 },
+    { id: 3, nombre: "Carlos R.", cargo: "Traveler", texto: "Todo fue rápido y sin complicaciones. Definitivamente volveré a viajar con ellos.", rating: 5 },
   ];
 
   return (
     <div className="bg-gray-50 min-h-screen">
       {/* 🔍 Barra de búsqueda */}
-     <div
-  className="bg-cover bg-center py-16"
-  style={{
-    backgroundImage:
-      "url('https://static.vecteezy.com/system/resources/thumbnails/066/256/393/small_2x/soft-colored-dynamic-abstract-background-with-shadow-creative-premium-gradient-smart-3d-cover-design-for-business-design-eps10-vector.jpg')",
-  }}
->
-
+      <div
+        className="bg-cover bg-center py-16"
+        style={{
+          backgroundImage:
+            "url('https://static.vecteezy.com/system/resources/thumbnails/066/256/393/small_2x/soft-colored-dynamic-abstract-background-with-shadow-creative-premium-gradient-smart-3d-cover-design-for-business-design-eps10-vector.jpg')",
+        }}
+      >
         <div className="max-w-5xl mx-auto px-4">
           <h1 className="text-2xl font-semibold text-gray-800 mb-4 text-center">
             ¿A dónde te gustaría ir?
@@ -66,22 +72,26 @@ export default function Home() {
           Explora el mundo con AirLink
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {destinos.map((dest) => (
-            <Link
-              key={dest.id}
-              to={`/destination/${dest.id}`}
-              className="relative bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition"
-            >
-              <img src={dest.img} alt={dest.nombre} className="w-full h-48 object-cover" />
-              <div className="absolute inset-0 bg-black bg-opacity-25 hover:bg-opacity-40 transition"></div>
-              <div className="absolute bottom-4 left-4 text-white">
-                <h3 className="font-semibold text-lg">{dest.nombre}</h3>
-                <p className="text-sm">{dest.precio}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Cargando destinos...</p>
+          </div>
+        ) : destinos.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500 text-lg">No hay destinos disponibles</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {destinos.map((destino) => (
+              <DestinationCard
+                key={destino.idDestino}
+                destino={destino}
+                showLink={true}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="text-center mt-10">
           <Link

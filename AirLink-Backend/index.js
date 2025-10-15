@@ -7,8 +7,7 @@ import { fileURLToPath } from "url";
 
 import { router as authRoutes } from "./auth.routes.js";
 import { router as uploadRoutes } from "./upload.routes.js";
-import { router as destinoRoutes } from "./destino.routes.js";
-import { router as empresaRoutes } from "./empresa.routes.js";
+import { router as destinosRoutes } from "./destinos.routes.js";
 
 dotenv.config();
 
@@ -24,29 +23,29 @@ const startServer = async () => {
   });
 
   const app = express();
-  app.use(cors());
+
+  // Configuración de CORS más permisiva
+  app.use(
+    cors({
+      origin: "*", // En producción cambiar a tu dominio específico
+      credentials: true,
+    })
+  );
+
   app.use(express.json());
 
-  // ✅ SERVIR ARCHIVOS ESTÁTICOS (imágenes)
+  // Servir archivos estáticos (imágenes)
   app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
   app.set("db", db);
 
   // Rutas
   app.use("/auth", authRoutes);
-  app.use("/api", uploadRoutes);
-  app.use("/api/destinos", destinoRoutes);
-  app.use("/api/empresas", empresaRoutes);
-
-  app.get("/", (req, res) => {
-    res.json({
-      message: "✈️ API Airlink activa",
-      version: "1.0.0",
-    });
-  });
+  app.use("/upload", uploadRoutes);
+  app.use("/destinos", destinosRoutes);
 
   app.listen(5174, () => {
-    console.log("✅ Servidor corriendo en http://localhost:5174");
+    console.log("✅ Servidor corriendo en el puerto 5174");
   });
 };
 
