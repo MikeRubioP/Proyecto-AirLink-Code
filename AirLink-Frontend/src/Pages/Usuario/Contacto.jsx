@@ -35,7 +35,7 @@ export default function Contacto() {
                 <div className="absolute -top-20 -left-24 h-72 w-72 rounded-full bg-[#7C4DFF]/10 blur-2xl" />
                 <div className="absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-[#7C4DFF]/10 blur-2xl" />
                 <div className="max-w-7xl mx-auto px-6 py-12 md:py-16">
-                    <p className="inline-flex items-center gap-2 text-sm text-[#7C4DFF] font-semibold bg-[#7C4DFF]/10 px-3 py-1 rounded-full">
+                    <p className="inline-flex items-center gap-2 text-sm text-violet-500 font-semibold bg-[#7C4DFF]/10 px-3 py-1 rounded-full">
                         📮 Contáctanos
                     </p>
                     <h1 className="mt-3 text-3xl md:text-4xl font-extrabold">
