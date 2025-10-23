@@ -1,30 +1,28 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext"; // asumiendo que exportas un hook
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 
 const BRAND = "#7C4DFF";
-
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5174";
 
+/** LISTA DE VIAJES (PROTEGIDA) */
 export default function MisViajes() {
-  const { user, token } = useAuth?.() || {};
+  const { token } = useAuth?.() || {};
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [reservas, setReservas] = useState([]);
 
-  // UI state
+  // UI
   const [q, setQ] = useState("");
-  const [estado, setEstado] = useState("todos"); // proximos | pasados | todos
+  const [estado, setEstado] = useState("todos"); // todos | proximos | pasados
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       setErr("");
-
-      // ---- fetch real a tu backend
       try {
         const res = await fetch(`${API_URL}/api/reservas/mias`, {
           headers: {
@@ -36,7 +34,6 @@ export default function MisViajes() {
         const data = await res.json();
         if (alive) setReservas(Array.isArray(data) ? data : []);
       } catch (e) {
-        // ---- mock si falla la API
         if (alive) {
           console.warn("Usando mock de MisViajes:", e?.message || e);
           setReservas(MOCK_RESERVAS);
@@ -53,7 +50,6 @@ export default function MisViajes() {
   const filtradas = useMemo(() => {
     let list = reservas.slice();
 
-    // Filtro por búsqueda
     if (q.trim()) {
       const term = q.trim().toLowerCase();
       list = list.filter((r) =>
@@ -63,14 +59,12 @@ export default function MisViajes() {
       );
     }
 
-    // Filtro por estado (fecha)
     if (estado === "proximos") {
       list = list.filter((r) => r.salidaIso > hoyISO);
     } else if (estado === "pasados") {
       list = list.filter((r) => r.salidaIso <= hoyISO);
     }
 
-    // Orden: próximos primero
     list.sort((a, b) => a.salidaIso.localeCompare(b.salidaIso));
     return list;
   }, [reservas, q, estado, hoyISO]);
@@ -79,7 +73,9 @@ export default function MisViajes() {
     <div className="min-h-screen bg-[#F7F7FB]">
       <header className="max-w-7xl mx-auto px-6 pt-8 pb-4">
         <h1 className="text-2xl md:text-3xl font-extrabold">Mis viajes</h1>
-        <p className="text-[#5c5c66] mt-1">Consulta tus reservas, realiza check-in y descarga pases de abordar.</p>
+        <p className="text-[#5c5c66] mt-1">
+          Consulta tus reservas, realiza check-in y descarga pases de abordar.
+        </p>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 pb-16">
@@ -115,18 +111,14 @@ export default function MisViajes() {
           </div>
         </div>
 
-        {/* Estado de carga / error / vacío */}
-        {loading && (
-          <div className="mt-8 text-[#5c5c66]">Cargando tus viajes…</div>
-        )}
-        {!loading && err && (
-          <div className="mt-8 text-red-600">Error: {err}</div>
-        )}
+        {/* estados */}
+        {loading && <div className="mt-8 text-[#5c5c66]">Cargando tus viajes…</div>}
+        {!loading && err && <div className="mt-8 text-red-600">Error: {err}</div>}
         {!loading && !err && filtradas.length === 0 && (
           <EmptyState onIrAExplorar={() => navigate("/")} />
         )}
 
-        {/* Lista de reservas */}
+        {/* lista */}
         <section className="mt-6 grid gap-4">
           {filtradas.map((r) => (
             <ReservaCard
@@ -142,15 +134,14 @@ export default function MisViajes() {
   );
 }
 
-/* ---------------- Subcomponentes ---------------- */
+/* ---------- Subcomponentes ---------- */
 
 function ReservaCard({ r, onCheckin, onDetalle }) {
   const esPasado = new Date(r.salidaIso) <= new Date();
-  const puedeCheckin = !esPasado && r.permiteCheckin; // regla simple, ajusta según tu negocio
+  const puedeCheckin = !esPasado && r.permiteCheckin;
 
   return (
     <article className="rounded-3xl border border-[#E7E7ED] bg-white p-5 md:p-6 flex flex-col md:flex-row md:items-center gap-4">
-      {/* Ruta + horario */}
       <div className="flex-1">
         <div className="text-sm text-[#5c5c66]">Vuelo {r.vuelo}</div>
         <div className="text-xl font-bold">
@@ -163,14 +154,12 @@ function ReservaCard({ r, onCheckin, onDetalle }) {
         <div className="mt-1 text-xs text-[#8A8A8E]">Pasajero: {r.pasajero}</div>
       </div>
 
-      {/* Badges */}
       <div className="flex flex-wrap items-center gap-2">
         <Badge>{esPasado ? "Finalizado" : "Próximo"}</Badge>
         {r.equipaje && <Badge>Equipaje: {r.equipaje}</Badge>}
         {r.tarifa && <Badge>{r.tarifa}</Badge>}
       </div>
 
-      {/* Acciones */}
       <div className="flex gap-2 md:ml-4">
         <button
           onClick={onDetalle}
@@ -212,7 +201,9 @@ function EmptyState({ onIrAExplorar }) {
         ✈
       </div>
       <h3 className="text-xl font-bold">Aún no tienes viajes</h3>
-      <p className="text-[#5c5c66] mt-1">Cuando reserves, aparecerán aquí para que gestiones tu experiencia.</p>
+      <p className="text-[#5c5c66] mt-1">
+        Cuando reserves, aparecerán aquí para que gestiones tu experiencia.
+      </p>
       <button
         onClick={onIrAExplorar}
         className="mt-4 px-6 py-3 rounded-xl text-white"
@@ -235,23 +226,26 @@ function Badge({ children }) {
 function tabCls(active) {
   return `px-4 py-2 rounded-xl text-sm ${
     active
-      ? "text-white"
+      ? "text-white bg-[#7C4DFF]"
       : "text-[#5c5c66] border border-[#E7E7ED] bg-white hover:bg-[#fafafe]"
-  } ${active ? "" : ""}`.trim() + (active ? "" : "");
+  }`;
 }
-  
-/* Utilidades */
+
 function fmtFecha(iso) {
   try {
     const d = new Date(iso);
-    return d.toLocaleDateString("es-CL", { weekday: "short", year: "numeric", month: "short", day: "numeric" });
+    return d.toLocaleDateString("es-CL", {
+      weekday: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
   } catch {
     return iso;
   }
 }
 
-/* ---------------- Mock de datos (por si la API no está lista) ---------------- */
-
+/* ----- Mock local (por si la API no está lista) ----- */
 const MOCK_RESERVAS = [
   {
     id: 1,
@@ -266,7 +260,7 @@ const MOCK_RESERVAS = [
     permiteCheckin: true,
     equipaje: "1× mano",
     tarifa: "Standard",
-    paseUrl: null
+    paseUrl: null,
   },
   {
     id: 2,
@@ -281,8 +275,8 @@ const MOCK_RESERVAS = [
     permiteCheckin: false,
     equipaje: "1× mano, 1× bodega",
     tarifa: "Flex",
-    paseUrl: "#"
-  }
+    paseUrl: "#",
+  },
 ];
 
 function addDaysISO(delta) {
