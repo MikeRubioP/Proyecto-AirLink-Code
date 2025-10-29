@@ -8,6 +8,8 @@ import { fileURLToPath } from "url";
 import { router as authRoutes } from "./auth.routes.js";
 import { router as uploadRoutes } from "./upload.routes.js";
 import { router as destinosRoutes } from "./destinos.routes.js";
+import { router as dpaRoutes } from "./dpa.routes.js"; 
+import { router as busesRoutes } from "./buses.routes.js";
 
 dotenv.config();
 
@@ -24,25 +26,27 @@ const startServer = async () => {
 
   const app = express();
 
-  // Configuración de CORS más permisiva
   app.use(
     cors({
-      origin: "*", // En producción cambiar a tu dominio específico
+      origin: "*",
       credentials: true,
     })
   );
 
   app.use(express.json());
 
-  // Servir archivos estáticos (imágenes)
+  // estáticos
   app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+  // inyecta DB si lo usas en middlewares/rutas
   app.set("db", db);
 
   // Rutas
   app.use("/auth", authRoutes);
   app.use("/upload", uploadRoutes);
   app.use("/destinos", destinosRoutes);
+  app.use("/dpa", dpaRoutes);
+  app.use("/buses", busesRoutes);
 
   app.listen(5174, () => {
     console.log("✅ Servidor corriendo en el puerto 5174");

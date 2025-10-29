@@ -19,6 +19,8 @@ import BuscarVuelos from "./Pages/Vuelos/BuscarVuelos";
 import SeleccionIda from "./Pages/Vuelos/SeleccionIda";
 import SeleccionVuelta from "./Pages/Vuelos/SeleccionVuelta";
 import Resumen from "./Pages/Vuelos/Resumen";
+import BuscarBuses from "./Pages/Buses/BuscarBuses";
+import Pago from "./Pages/Pago/Pago";
 
 import { VueloProvider } from "./Pages/Vuelos/context/VueloContext";
 
@@ -49,6 +51,8 @@ export default function App() {
                   <Route path="seleccionar-vuelta" element={<SeleccionVuelta />} />
                   <Route path="resumen" element={<Resumen />} />
                 </Route>
+                <Route path="/buses" element={<BuscarBuses />} />
+                <Route path="/pago" element={<Pago />} />
               </Routes>
             </Suspense>
           </main>
