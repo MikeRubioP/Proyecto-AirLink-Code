@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import Footer from "../../Components/Footer";
 
 // Si tienes ilustraciones propias, colócalas en src/assets y cámbialas aquí:
 const heroImg = new URL("../../assets/airlinkLogo2.png", import.meta.url).href;
@@ -145,6 +146,7 @@ export default function SobreNosotros() {
                     </form>
                 </div>
             </section>
+            <Footer />
         </div>
     );
 }

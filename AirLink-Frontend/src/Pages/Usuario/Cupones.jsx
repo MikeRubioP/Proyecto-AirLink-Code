@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-
+import Footer from "../../Components/Footer";
 export default function Cupones() {
     const [copied, setCopied] = useState("");
 
@@ -115,6 +115,7 @@ export default function Cupones() {
                     ))}
                 </div>
             </section>
+             <Footer />
         </div>
     );
 }
@@ -163,6 +164,8 @@ function CouponCategoryCard({ category, onCopy, copied }) {
                 <p className="text-xs text-gray-600 mb-1">Código del cupón</p>
                 <p className="font-bold text-violet-700 text-lg">{category.code}</p>
             </div>
+          
         </div>
+       
     );
 }

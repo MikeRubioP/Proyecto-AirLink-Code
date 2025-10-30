@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import DestinationCard from "../../Components/DestinationCard";
+import Footer from "../../Components/Footer";
 
 export default function Home() {
   const [destinos, setDestinos] = useState([]);
@@ -130,6 +131,12 @@ export default function Home() {
           ))}
         </div>
       </section>
+     {/* 🦶 Footer */}
+      <Footer />
     </div>
+   
+ 
+
+
   );
 }

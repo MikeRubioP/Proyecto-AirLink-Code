@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import Footer from "../../Components/Footer";
 
 const API_URL = "http://localhost:5174";
 
@@ -128,6 +129,7 @@ export default function Ofertas() {
                     <p className="text-gray-500 text-lg">No hay ofertas disponibles en este momento</p>
                 </div>
             )}
+             <Footer />
         </div>
     );
 }
@@ -198,6 +200,7 @@ function Carousel({ destinos }) {
                     <ChevronRight className="w-6 h-6 text-gray-700" />
                 </button>
             )}
+            
         </div>
     );
 }
@@ -261,8 +264,11 @@ function OfferCard({ destino }) {
                             OFF
                         </div>
                     </div>
+                    
                 </div>
+            
             </div>
+           
         </Link>
     );
 }

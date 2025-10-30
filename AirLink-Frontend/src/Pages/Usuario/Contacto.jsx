@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Footer from "../../Components/Footer";
 
 export default function Contacto() {
     const [form, setForm] = useState({
@@ -166,6 +167,7 @@ export default function Contacto() {
                     />
                 </div>
             </section>
+            <Footer />
         </div>
     );
 }
@@ -186,8 +188,12 @@ function ContactCard({ icon, title, lines = [] }) {
                             {l}
                         </p>
                     ))}
+                    
                 </div>
+                
             </div>
+            
         </div>
+        
     );
 }
