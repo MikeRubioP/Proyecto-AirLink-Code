@@ -1,12 +1,57 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import Swal from "sweetalert2";
 import Footer from "../../Components/Footer";
 
 // Si tienes ilustraciones propias, colócalas en src/assets y cámbialas aquí:
 const heroImg = new URL("../../assets/airlinkLogo2.png", import.meta.url).href;
-// Puedes crear más imágenes y reemplazar los placeholders abajo cuando las tengas.
 
 export default function SobreNosotros() {
+    const handleSubscribe = async (e) => {
+        e.preventDefault();
+
+        const emailInput = e.target.querySelector("input");
+        const email = emailInput.value.trim();
+
+        // Validar email
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            Swal.fire({
+                icon: "error",
+                title: "Correo inválido ❌",
+                text: "Por favor ingresa un correo electrónico válido.",
+                confirmButtonColor: "#7C4DFF",
+            });
+            return;
+        }
+
+        // Confirmación antes de suscribirse
+        const confirm = await Swal.fire({
+            title: "¿Confirmas tu suscripción? 💌",
+            text: `Suscribiremos el correo: ${email}`,
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "Sí, suscribirme",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#7C4DFF",
+            cancelButtonColor: "#d33",
+        });
+
+        if (confirm.isConfirmed) {
+            // Simula envío exitoso
+            await new Promise((r) => setTimeout(r, 800));
+
+            Swal.fire({
+                icon: "success",
+                title: "¡Suscripción exitosa! ✈️",
+                text: "Gracias por unirte a nuestras novedades y ofertas de viaje.",
+                confirmButtonColor: "#7C4DFF",
+            });
+
+            emailInput.value = "";
+        }
+    };
+
     return (
         <div className="min-h-screen bg-[#F7F7FB] text-[#242424]">
             {/* HERO */}
@@ -46,11 +91,7 @@ export default function SobreNosotros() {
 
                     <div className="relative">
                         <div className="aspect-[4/3] rounded-3xl bg-white shadow-sm border border-[#E7E7ED] overflow-hidden grid place-items-center">
-                            <img
-                                src={heroImg}
-                                alt="AirLink"
-                                className="w-2/3 opacity-90"
-                            />
+                            <img src={heroImg} alt="AirLink" className="w-2/3 opacity-90" />
                         </div>
                     </div>
                 </div>
@@ -130,7 +171,7 @@ export default function SobreNosotros() {
                         Recibe novedades, descuentos y tips de viaje una vez al mes.
                     </p>
                     <form
-                        onSubmit={(e) => e.preventDefault()}
+                        onSubmit={handleSubscribe}
                         className="mt-6 flex flex-col sm:flex-row gap-3 justify-center"
                     >
                         <input
@@ -140,6 +181,7 @@ export default function SobreNosotros() {
                         <button
                             className="btn-primary rounded-xl px-6 py-3"
                             style={{ background: "#7C4DFF" }}
+                            type="submit"
                         >
                             Suscribirme
                         </button>

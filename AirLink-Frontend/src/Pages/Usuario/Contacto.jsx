@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Swal from "sweetalert2"; // 🔹 Importamos SweetAlert2
 import Footer from "../../Components/Footer";
 
 export default function Contacto() {
@@ -9,7 +10,6 @@ export default function Contacto() {
         mensaje: "",
     });
     const [sending, setSending] = useState(false);
-    const [ok, setOk] = useState(false);
 
     function onChange(e) {
         setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -17,13 +17,43 @@ export default function Contacto() {
 
     async function onSubmit(e) {
         e.preventDefault();
+
+        // 🔹 Confirmación antes de enviar
+        const confirm = await Swal.fire({
+            title: "¿Deseas enviar el mensaje?",
+            text: "Verifica que tus datos sean correctos antes de continuar.",
+            icon: "question",
+            showCancelButton: true,
+            confirmButtonText: "Sí, enviar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#7C4DFF",
+            cancelButtonColor: "#aaa",
+        });
+
+        if (!confirm.isConfirmed) return; // Si cancela, no sigue
+
         setSending(true);
-        setOk(false);
         try {
-            // Aquí podrías llamar a tu backend: fetch(`${API}/api/contact`, {method:'POST', body: JSON.stringify(form)...})
-            await new Promise((r) => setTimeout(r, 700)); // simulación
-            setOk(true);
+            // Simulación de envío (aquí iría tu fetch real)
+            await new Promise((r) => setTimeout(r, 700));
+
+            // 🔹 SweetAlert de éxito
+            await Swal.fire({
+                icon: "success",
+                title: "¡Mensaje enviado!",
+                text: "Gracias por contactarnos. Te responderemos pronto.",
+                confirmButtonColor: "#7C4DFF",
+            });
+
             setForm({ nombre: "", email: "", asunto: "", mensaje: "" });
+        } catch (error) {
+            // 🔹 SweetAlert de error
+            Swal.fire({
+                icon: "error",
+                title: "Error al enviar",
+                text: "Ocurrió un problema al enviar tu mensaje. Intenta nuevamente.",
+                confirmButtonColor: "#7C4DFF",
+            });
         } finally {
             setSending(false);
         }
@@ -55,12 +85,6 @@ export default function Contacto() {
                 <div className="lg:col-span-2 rounded-3xl border border-[#E7E7ED] bg-white p-6 md:p-8">
                     <h2 className="text-xl font-bold">Envíanos un mensaje</h2>
                     <p className="text-[#5c5c66] mb-6">Respondemos en menos de 24 horas hábiles.</p>
-
-                    {ok && (
-                        <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-green-700">
-                            ¡Gracias! Tu mensaje fue enviado correctamente.
-                        </div>
-                    )}
 
                     <form onSubmit={onSubmit} className="space-y-4">
                         <div className="grid md:grid-cols-2 gap-4">
@@ -158,7 +182,6 @@ export default function Contacto() {
             {/* Mapa / ubicación */}
             <section className="max-w-7xl mx-auto px-6 pb-20">
                 <div className="rounded-3xl overflow-hidden border border-[#E7E7ED] bg-white">
-                    {/* Puedes reemplazar el iframe por tu embed real de Google Maps */}
                     <iframe
                         title="AirLink HQ"
                         src="https://maps.google.com/maps?q=Santiago%20Chile&t=&z=12&ie=UTF8&iwloc=&output=embed"
@@ -188,12 +211,8 @@ function ContactCard({ icon, title, lines = [] }) {
                             {l}
                         </p>
                     ))}
-                    
                 </div>
-                
             </div>
-            
         </div>
-        
     );
 }
