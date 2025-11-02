@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DestinationCard from "../../Components/DestinationCard";
+import Footer from "../../Components/Footer";
 
 
 import { useVuelo } from "../Vuelos/context/VueloContext.jsx";
@@ -311,6 +312,12 @@ export default function Home() {
           ))}
         </div>
       </section>
+     {/* 🦶 Footer */}
+      <Footer />
     </div>
+   
+ 
+
+
   );
 }
