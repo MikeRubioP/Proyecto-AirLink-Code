@@ -4,14 +4,15 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { User, Menu, X, LogOut, UserCircle } from 'lucide-react';
 import airlinkLogo from '../assets/airlinkLogo2.png';
 import LoginModal from './LoginModal';
-import RegisterModal from './RegisterModal'; // ⬅️ AGREGADO
+import RegisterModal from './RegisterModal';
 import { useAuth } from "../context/AuthContext";
 
 const Navbar = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-    const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false); // ⬅️ AGREGADO
+    const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
     const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
     const menuRef = useRef(null);
     const toggleRef = useRef(null);
     const userMenuRef = useRef(null);
@@ -37,7 +38,7 @@ const Navbar = () => {
 
     const handleCloseModal = () => {
         setIsLoginModalOpen(false);
-        setIsRegisterModalOpen(false); // ⬅️ AGREGADO
+        setIsRegisterModalOpen(false);
     };
 
     const handleLogout = () => {
@@ -107,19 +108,35 @@ const Navbar = () => {
             <nav className="bg-white shadow-xs relative z-50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
+                        {/* Logo izquierda */}
                         <div className="flex-shrink-0 flex items-center">
                             <NavLink to="/" onClick={handleLinkClick} className="flex items-center">
                                 <img src={airlinkLogo} alt="AirLink" className="h-20 w-auto" />
                             </NavLink>
                         </div>
 
+                        {/* Menú desktop */}
                         <div className="hidden md:block">
                             <div className="ml-10 flex items-baseline space-x-8">
+
+                                {/* ✅ NUEVO: Buscar pasajes */}
+                                <NavLink
+                                    to="/vuelos/buscar"
+                                    onClick={handleLinkClick}
+                                    className={({ isActive }) =>
+                                        `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
+                                    }
+                                >
+                                    Buscar pasajes
+                                </NavLink>
+
                                 <NavLink
                                     to="/"
                                     end
                                     onClick={handleLinkClick}
-                                    className={({ isActive }) => `${isActive ? desktopActive : desktopInactive} ${desktopBase}`}
+                                    className={({ isActive }) =>
+                                        `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
+                                    }
                                 >
                                     Inicio
                                 </NavLink>
@@ -127,7 +144,9 @@ const Navbar = () => {
                                 <NavLink
                                     to="/ofertas"
                                     onClick={handleLinkClick}
-                                    className={({ isActive }) => `${isActive ? desktopActive : desktopInactive} ${desktopBase}`}
+                                    className={({ isActive }) =>
+                                        `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
+                                    }
                                 >
                                     Ofertas
                                 </NavLink>
@@ -137,7 +156,9 @@ const Navbar = () => {
                                         <NavLink
                                             to="/mis-viajes"
                                             onClick={handleLinkClick}
-                                            className={({ isActive }) => `${isActive ? desktopActive : desktopInactive} ${desktopBase}`}
+                                            className={({ isActive }) =>
+                                                `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
+                                            }
                                         >
                                             Mis Viajes
                                         </NavLink>
@@ -145,7 +166,9 @@ const Navbar = () => {
                                         <NavLink
                                             to="/checkin"
                                             onClick={handleLinkClick}
-                                            className={({ isActive }) => `${isActive ? desktopActive : desktopInactive} ${desktopBase}`}
+                                            className={({ isActive }) =>
+                                                `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
+                                            }
                                         >
                                             Check-in
                                         </NavLink>
@@ -155,7 +178,9 @@ const Navbar = () => {
                                 <NavLink
                                     to="/cupones"
                                     onClick={handleLinkClick}
-                                    className={({ isActive }) => `${isActive ? desktopActive : desktopInactive} ${desktopBase}`}
+                                    className={({ isActive }) =>
+                                        `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
+                                    }
                                 >
                                     Cupones
                                 </NavLink>
@@ -163,7 +188,9 @@ const Navbar = () => {
                                 <NavLink
                                     to="/contacto"
                                     onClick={handleLinkClick}
-                                    className={({ isActive }) => `${isActive ? desktopActive : desktopInactive} ${desktopBase}`}
+                                    className={({ isActive }) =>
+                                        `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
+                                    }
                                 >
                                     Contacto
                                 </NavLink>
@@ -172,7 +199,9 @@ const Navbar = () => {
                                     <NavLink
                                         to="/sobre-nosotros"
                                         onClick={handleLinkClick}
-                                        className={({ isActive }) => `${isActive ? desktopActive : desktopInactive} ${desktopBase}`}
+                                        className={({ isActive }) =>
+                                            `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
+                                        }
                                     >
                                         Sobre nosotros
                                     </NavLink>
@@ -180,6 +209,7 @@ const Navbar = () => {
                             </div>
                         </div>
 
+                        {/* Botón usuario (desktop) */}
                         <div className="hidden md:block relative" ref={userMenuRef}>
                             <button
                                 onClick={handleUserClick}
@@ -200,6 +230,7 @@ const Navbar = () => {
                                         <p className="text-sm font-medium text-gray-900">{user?.nombreUsuario}</p>
                                         <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                                     </div>
+
                                     <button
                                         onClick={() => {
                                             setIsUserMenuOpen(false);
@@ -210,6 +241,7 @@ const Navbar = () => {
                                         <UserCircle className="h-4 w-4" />
                                         Mi Cuenta
                                     </button>
+
                                     <button
                                         onClick={() => {
                                             setIsUserMenuOpen(false);
@@ -222,6 +254,7 @@ const Navbar = () => {
                                         </svg>
                                         Mis Viajes
                                     </button>
+
                                     <button
                                         onClick={() => {
                                             setIsUserMenuOpen(false);
@@ -234,7 +267,9 @@ const Navbar = () => {
                                         </svg>
                                         Check-in
                                     </button>
+
                                     <div className="border-t border-gray-200 mt-1"></div>
+
                                     <button
                                         onClick={handleLogout}
                                         className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
@@ -246,7 +281,7 @@ const Navbar = () => {
                             )}
                         </div>
 
-                        {/* Menu Mobile */}
+                        {/* Menu Mobile toggle */}
                         <div className="md:hidden">
                             <button
                                 ref={toggleRef}
@@ -272,6 +307,19 @@ const Navbar = () => {
                         aria-label="Menú móvil"
                     >
                         <div className="px-2 pt-2 pb-3 space-y-1">
+
+                            {/* ✅ NUEVO: Buscar pasajes (mobile) */}
+                            <NavLink
+                                to="/vuelos/buscar"
+                                onClick={handleLinkClick}
+                                className={({ isActive }) =>
+                                    `${isActive ? mobileActive : mobileInactive} ${mobileBase}`
+                                }
+                                role="menuitem"
+                            >
+                                Buscar pasajes
+                            </NavLink>
+
                             <NavLink
                                 to="/"
                                 end
@@ -408,7 +456,7 @@ const Navbar = () => {
                 )}
             </nav>
 
-            {/* ⬇️ AMBOS MODALES CON LAS FUNCIONES DE CAMBIO */}
+            {/* Modales de Login / Registro */}
             <LoginModal
                 isOpen={isLoginModalOpen}
                 onClose={handleCloseModal}

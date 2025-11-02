@@ -1,60 +1,112 @@
+// src/Pages/Vuelos/SeleccionIda.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import { useVuelo } from "./context/VueloContext";
-import FlightCard from "./components/FlightCard";
 import { mockFlights } from "./utils/mockFlights";
+import FlightResultCard from "./components/FlightResultCard";
+import StepsBar from "./components/StepsBar";
 
 export default function SeleccionIda() {
   const navigate = useNavigate();
   const { form, setForm } = useVuelo();
 
   const [items, setItems] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Cargar opciones (mock) cuando cambian los filtros
+  // origen/destino/fecha desde el contexto
+  const origen = form?.origen || "SCL";
+  const destino = form?.destino || "MIA";
+  const fechaViaje = form?.fechaIda || "2025-10-23";
+
+  const roundTrip = !!form?.fechaVuelta; // true si el usuario seleccionó vuelta
+
   useEffect(() => {
     setLoading(true);
 
     const data = mockFlights({
-      origen: form.origen || "SCL",
-      destino: form.destino || "MIA",
-      fecha: form.fechaIda || "2025-10-23",
+      origen,
+      destino,
+      fecha: fechaViaje,
     });
 
     setItems(data);
     setLoading(false);
-  }, [form.origen, form.destino, form.fechaIda]);
+  }, [origen, destino, fechaViaje]);
 
-  const onChoose = (vuelo) => {
-    setSelectedId(vuelo.id);
-    setForm((s) => ({ ...s, vueloIda: vuelo }));
+  const handleExpand = (vueloId) => {
+    setExpandedId((curr) => (curr === vueloId ? null : vueloId));
+  };
 
-    if (form.fechaVuelta) {
-      navigate("/vuelos/seleccionar-vuelta");
+  const handleChooseFare = (vuelo, fare) => {
+    // Guardar selección
+    setForm((prev) => ({
+      ...prev,
+      vueloIda: {
+        ...vuelo,
+        tarifaSeleccionada: fare,
+      },
+    }));
+
+    // Flujo: si hay vuelta -> ir a SeleccionVuelta
+    // si no hay vuelta -> ir a Resumen
+    if (roundTrip) {
+      navigate("/vuelos/seleccion-vuelta");
     } else {
       navigate("/vuelos/resumen");
     }
   };
 
-  if (loading) return <div className="text-center">Cargando vuelos…</div>;
-  if (!items.length) return <div className="text-center">No hay vuelos disponibles.</div>;
+  if (loading) {
+    return (
+      <>
+        <StepsBar currentStep={2} roundTrip={roundTrip} />
+        <div className="max-w-5xl mx-auto px-4 py-10 text-center text-gray-600">
+          Cargando vuelos de ida…
+        </div>
+      </>
+    );
+  }
+
+  if (!items.length) {
+    return (
+      <>
+        <StepsBar currentStep={2} roundTrip={roundTrip} />
+        <div className="max-w-5xl mx-auto px-4 py-10 text-center text-gray-600">
+          No hay vuelos de ida disponibles.
+        </div>
+      </>
+    );
+  }
 
   return (
-    <section className="space-y-4">
-      <h2 className="text-center text-lg font-semibold">Elige un vuelo de ida</h2>
+    <>
+      {/* Barra de pasos */}
+      <StepsBar currentStep={2} roundTrip={roundTrip} />
 
-      <ul className="space-y-3">
-        {items.map((v) => (
-          <li key={v.id}>
-            <FlightCard
-              data={v}
-              selected={selectedId === v.id}
-              onChoose={() => onChoose(v)}
-            />
-          </li>
-        ))}
-      </ul>
-    </section>
+      {/* Título */}
+      <div className="bg-gray-50 border-b border-gray-200">
+        <h2 className="max-w-5xl mx-auto px-4 py-6 text-center text-xl font-semibold text-gray-900">
+          Elige un vuelo de ida
+        </h2>
+      </div>
+
+      {/* Resultados */}
+      <section className="max-w-5xl mx-auto px-4 py-8 space-y-4">
+        <ul className="space-y-4">
+          {items.map((vuelo) => (
+            <li key={vuelo.id}>
+              <FlightResultCard
+                vuelo={vuelo}
+                expanded={expandedId === vuelo.id}
+                onExpand={() => handleExpand(vuelo.id)}
+                onChooseFare={(fare) => handleChooseFare(vuelo, fare)}
+              />
+            </li>
+          ))}
+        </ul>
+      </section>
+    </>
   );
 }
