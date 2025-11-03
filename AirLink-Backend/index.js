@@ -6,11 +6,13 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import { router as authRoutes } from "./auth.routes.js";
-import { router as uploadRoutes } from "./upload.routes.js";
-import { router as destinosRoutes } from "./destinos.routes.js";
-import { router as dpaRoutes } from "./dpa.routes.js"; 
-import { router as busesRoutes } from "./buses.routes.js";
-import { countriesRoutes } from "./integrations/countries.routes.js"; 
+
+import { router as uploadRoutes }   from "./integrations/upload.routes.js";
+import { router as destinosRoutes } from "./integrations/destinos.routes.js";
+import { router as dpaRoutes }      from "./integrations/dpa.routes.js";
+import { router as busesRoutes }    from "./integrations/buses.routes.js";
+import { countriesRoutes }          from "./integrations/countries.routes.js";
+import { geocodingRoutes } from "./integrations/geocoding.routes.js";
 
 dotenv.config();
 
@@ -36,10 +38,8 @@ const startServer = async () => {
 
   app.use(express.json());
 
-  // estáticos
   app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-  // inyecta DB si lo usas en middlewares/rutas
   app.set("db", db);
 
   // Rutas
@@ -48,7 +48,8 @@ const startServer = async () => {
   app.use("/destinos", destinosRoutes);
   app.use("/dpa", dpaRoutes);
   app.use("/buses", busesRoutes);
-  app.use("/api/countries", countriesRoutes); 
+  app.use("/api/countries", countriesRoutes);
+  app.use("/api/geocoding", geocodingRoutes);
 
   app.listen(5174, () => {
     console.log("✅ Servidor corriendo en el puerto 5174");
