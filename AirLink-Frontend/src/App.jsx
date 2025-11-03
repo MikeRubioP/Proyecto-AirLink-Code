@@ -11,22 +11,19 @@ import Cupones from "./Pages/Usuario/Cupones";
 import Contacto from "./Pages/Usuario/Contacto";
 import SobreNosotros from "./Pages/Usuario/SobreNosotros";
 
-import DetalleVuelo from "./Pages/Cliente/DetalleVuelo";
 import MisViajes from "./Pages/Cliente/MisViajes";
 import CheckIn from "./Pages/Cliente/CheckIn";
 import MiCuenta from "./Pages/Cliente/Cuenta";
 import Asientos from "./Pages/Cliente/Asientos";
 
-import VuelosLayout from "./Pages/Vuelos/VuelosLayout";
 import BuscarVuelos from "./Pages/Vuelos/BuscarVuelos";
-import SeleccionIda from "./Pages/Vuelos/SeleccionIda";
-import SeleccionVuelta from "./Pages/Vuelos/SeleccionVuelta";
-import Resumen from "./Pages/Vuelos/Resumen";
 
 import BuscarBuses from "./Pages/Buses/BuscarBuses";
 import Pago from "./Pages/Pago/Pago";
 
 import { VueloProvider } from "./Pages/Vuelos/context/VueloContext";
+import SeleccionVueloVuelta from "./Pages/Vuelos/SeleccionVueloVuelta";
+import DetalleViaje from "./Pages/Vuelos/DetalleViaje";
 
 export default function App() {
   return (
@@ -52,17 +49,21 @@ export default function App() {
                 <Route path="/mis-viajes" element={<MisViajes />} />
                 <Route path="/checkin" element={<CheckIn />} />
                 <Route path="/mi-cuenta" element={<MiCuenta />} />
-                <Route path="/vuelos/:id" element={<DetalleVuelo />} />
-                <Route path="/asientos" element={<Asientos />} />
+                {/* <Route path="/vuelos/:id" element={<DetalleVuelo />} /> */}
+
+                <Route path="/vuelos/asientos" element={<Asientos />} />
+                <Route path="/vuelos/buscar" element={<BuscarVuelos />} />
+                <Route path="/vuelos/vuelta" element={<SeleccionVueloVuelta />} />
+                <Route path="/vuelos/detalleviaje" element={<DetalleViaje />} />
+
 
                 {/* Flujo de compra de vuelos */}
-                <Route path="/vuelos" element={<VuelosLayout />}>
-                  <Route index element={<BuscarVuelos />} />
-                  <Route path="buscar" element={<BuscarVuelos />} />
-                  <Route path="seleccionar-ida" element={<SeleccionIda />} />
-                  <Route path="seleccionar-vuelta" element={<SeleccionVuelta />} />
-                  <Route path="resumen" element={<Resumen />} />
-                </Route>
+                {/* <Route path="/vuelos" element={<VuelosLayout />}> */}
+                {/* <Route index element={<BuscarVuelos />} />
+                  <Route path="buscar" element={<BuscarVuelos />} /> */}
+                {/* <Route path="seleccionar-ida" element={<SeleccionIda />} />
+                  <Route path="resumen" element={<Resumen />} /> */}
+                {/* </Route> */}
 
                 {/* Buses */}
                 <Route path="/buses" element={<BuscarBuses />} />
@@ -77,6 +78,6 @@ export default function App() {
           <Footer />
         </div>
       </VueloProvider>
-    </AuthProvider>
+    </AuthProvider >
   );
 }

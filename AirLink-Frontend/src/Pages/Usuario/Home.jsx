@@ -11,7 +11,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
-  const { form, setForm } = useVuelo(); 
+  const { form, setForm } = useVuelo();
 
   // estado local de la barra
   const [tripType, setTripType] = useState(form.fechaVuelta ? "round" : "oneway");
@@ -312,11 +312,9 @@ export default function Home() {
           ))}
         </div>
       </section>
-     {/* 🦶 Footer */}
-      <Footer />
     </div>
-   
- 
+
+
 
 
   );

@@ -131,9 +131,6 @@ export default function Cupones() {
           ))}
         </div>
       </section>
-
-      {/* ✅ Footer agregado */}
-      <Footer />
     </div>
   );
 }

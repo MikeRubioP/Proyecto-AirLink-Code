@@ -188,7 +188,6 @@ export default function SobreNosotros() {
                     </form>
                 </div>
             </section>
-            <Footer />
         </div>
     );
 }
