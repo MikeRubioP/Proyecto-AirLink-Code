@@ -10,6 +10,7 @@ import { router as uploadRoutes } from "./upload.routes.js";
 import { router as destinosRoutes } from "./destinos.routes.js";
 import { router as dpaRoutes } from "./dpa.routes.js"; 
 import { router as busesRoutes } from "./buses.routes.js";
+import { countriesRoutes } from "./integrations/countries.routes.js"; 
 
 dotenv.config();
 
@@ -47,6 +48,7 @@ const startServer = async () => {
   app.use("/destinos", destinosRoutes);
   app.use("/dpa", dpaRoutes);
   app.use("/buses", busesRoutes);
+  app.use("/api/countries", countriesRoutes); 
 
   app.listen(5174, () => {
     console.log("✅ Servidor corriendo en el puerto 5174");
