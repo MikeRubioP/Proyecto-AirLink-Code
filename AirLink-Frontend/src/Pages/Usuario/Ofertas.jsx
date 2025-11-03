@@ -79,7 +79,7 @@ export default function Ofertas() {
             <img
                 src="src/assets/Banners2.png"
                 alt="Banner Cupones"
-                className="w-full h-48 md:h-64 object-cover"
+                className="w-full h-48 md:h-64 rounded-2xl shadow-sm object-cover"
             />
 
             {/* VUELOS AL NORTE DE CHILE */}
@@ -129,7 +129,7 @@ export default function Ofertas() {
                     <p className="text-gray-500 text-lg">No hay ofertas disponibles en este momento</p>
                 </div>
             )}
-             <Footer />
+        
         </div>
     );
 }

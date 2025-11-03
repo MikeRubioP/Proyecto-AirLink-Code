@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DestinationCard from "../../Components/DestinationCard";
 import Footer from "../../Components/Footer";
-
-
+import BannersHome from "../../assets/BannersHome.png";
 import { useVuelo } from "../Vuelos/context/VueloContext.jsx";
 
 export default function Home() {
@@ -11,9 +10,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
-  const { form, setForm } = useVuelo(); 
+  const { form, setForm } = useVuelo();
 
-  // estado local de la barra
   const [tripType, setTripType] = useState(form.fechaVuelta ? "round" : "oneway");
   const [desde, setDesde] = useState(form.origen || "");
   const [hacia, setHacia] = useState(form.destino || "");
@@ -37,102 +35,75 @@ export default function Home() {
   const handleSearch = (e) => {
     e.preventDefault();
 
-    // Guardar los filtros en tu contexto global de vuelo
     setForm((prev) => ({
       ...prev,
-      origen: desde || "",        // ej "SCL"
-      destino: hacia || "",       // ej "MIA"
-      fechaIda: ida || "",        // ej "2025-10-23"
-      fechaVuelta: tripType === "round" ? vuelta || "" : "", // si solo ida, limpiamos
-      clase: clase || "",         // Económica / Premium / etc
-      vueloIda: null,             // reseteamos selección anterior
-      vueloVuelta: null,          // reseteamos selección anterior
+      origen: desde || "",
+      destino: hacia || "",
+      fechaIda: ida || "",
+      fechaVuelta: tripType === "round" ? vuelta || "" : "",
+      clase: clase || "",
+      vueloIda: null,
+      vueloVuelta: null,
     }));
 
-    // Redirigir a la página de SeleccionIda
     navigate("/vuelos/seleccion-ida");
   };
 
-  const reseñas = [
-    {
-      id: 1,
-      nombre: "John D.",
-      cargo: "Traveler",
-      texto:
-        "El servicio fue excelente, el vuelo cómodo y puntual. ¡Altamente recomendado!",
-      rating: 5,
-    },
-    {
-      id: 2,
-      nombre: "María S.",
-      cargo: "Traveler",
-      texto:
-        "Muy buena experiencia con AirLink, fácil de reservar y excelente atención.",
-      rating: 4,
-    },
-    {
-      id: 3,
-      nombre: "Carlos R.",
-      cargo: "Traveler",
-      texto:
-        "Todo fue rápido y sin complicaciones. Definitivamente volveré a viajar con ellos.",
-      rating: 5,
-    },
-  ];
-
   return (
-    <div className="bg-gray-50 min-h-screen">
+    <div className="bg-gray-50 min-h-screen flex flex-col">
       {/* HERO CON BUSCADOR */}
       <div
-        className="bg-cover bg-center py-16"
+        className="relative bg-cover bg-center h-[450px] md:h-[500px] rounded-b-3xl shadow-md overflow-hidden animate-gradient"
         style={{
-          backgroundImage:
-            "linear-gradient(to right bottom, rgba(255,255,255,0.6), rgba(255,255,255,0.3)), url('https://static.vecteezy.com/system/resources/thumbnails/066/256/393/small_2x/soft-colored-dynamic-abstract-background-with-shadow-creative-premium-gradient-smart-3d-cover-design-for-business-design-eps10-vector.jpg')",
+          backgroundImage: `linear-gradient(to right bottom, rgba(69, 13, 130, 0.75), rgba(147, 51, 234, 0.45)), url(${BannersHome})`,
+          backgroundBlendMode: "overlay",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
         }}
       >
-        <div className="max-w-5xl mx-auto w-full px-4 py-6 bg-transparent">
-          {/* título */}
-          <h1 className="text-2xl font-semibold text-gray-900 mb-2">
+        {/* Contenido sobre el banner */}
+        <div className="absolute inset-0 flex flex-col justify-center items-center text-center px-6">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 drop-shadow-lg animate-fade-in">
             ¿A dónde te gustaría ir?
           </h1>
 
-          {/* tipo de viaje */}
-          <div className="flex items-center gap-4 text-sm text-gray-800 mb-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="tripType"
-                value="round"
-                checked={tripType === "round"}
-                onChange={() => setTripType("round")}
-                className="text-purple-600 focus:ring-purple-600"
-              />
-              <span>Ida y vuelta</span>
-            </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="tripType"
-                value="oneway"
-                checked={tripType === "oneway"}
-                onChange={() => setTripType("oneway")}
-                className="text-purple-600 focus:ring-purple-600"
-              />
-              <span>Solo ida</span>
-            </label>
-          </div>
-
-          {/* barra segmentada */}
+          {/* CONTENEDOR BUSCADOR */}
           <form
             onSubmit={handleSearch}
-            className={`flex flex-col md:flex-row md:items-stretch md:flex-wrap gap-3
-                        border border-purple-400 rounded-sm bg-white p-2 md:p-0`}
+            className="w-full max-w-4xl bg-white/95 backdrop-blur-md border border-purple-200 shadow-lg rounded-2xl p-4 flex flex-col md:flex-row md:flex-wrap gap-3"
           >
-            {/* Desde */}
-            <div className="flex items-center md:border-r md:border-gray-300 px-3 py-2 flex-1 min-w-[150px]">
+            {/* Tipo de viaje */}
+            <div className="flex justify-center w-full gap-6 text-sm text-gray-700">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="tripType"
+                  value="round"
+                  checked={tripType === "round"}
+                  onChange={() => setTripType("round")}
+                  className="text-purple-600 focus:ring-purple-600"
+                />
+                <span>Ida y vuelta</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="tripType"
+                  value="oneway"
+                  checked={tripType === "oneway"}
+                  onChange={() => setTripType("oneway")}
+                  className="text-purple-600 focus:ring-purple-600"
+                />
+                <span>Solo ida</span>
+              </label>
+            </div>
+
+            {/* Campos del buscador */}
+            <div className="flex flex-col md:flex-row gap-3 w-full">
+              {/* Desde */}
               <select
-                className="w-full bg-transparent text-sm text-gray-800 outline-none appearance-none"
+                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
                 value={desde}
                 onChange={(e) => setDesde(e.target.value)}
                 required
@@ -142,13 +113,10 @@ export default function Home() {
                 <option value="LSC">La Serena</option>
                 <option value="CPO">Copiapó</option>
               </select>
-              <span className="ml-2 text-gray-600 text-xs">▼</span>
-            </div>
 
-            {/* Hacia */}
-            <div className="flex items-center md:border-r md:border-gray-300 px-3 py-2 flex-1 min-w-[150px]">
+              {/* Hacia */}
               <select
-                className="w-full bg-transparent text-sm text-gray-800 outline-none appearance-none"
+                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
                 value={hacia}
                 onChange={(e) => setHacia(e.target.value)}
                 required
@@ -158,43 +126,30 @@ export default function Home() {
                 <option value="ANF">Antofagasta</option>
                 <option value="BUE">Buenos Aires</option>
               </select>
-              <span className="ml-2 text-gray-600 text-xs">▼</span>
-            </div>
 
-            {/* Ida */}
-            <div className="flex items-center md:border-r md:border-gray-300 px-3 py-2 flex-1 min-w-[140px]">
-              <div className="flex flex-col w-full">
-                <span className="text-gray-800 text-sm mb-1">Ida</span>
+              {/* Ida */}
+              <input
+                type="date"
+                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
+                value={ida}
+                onChange={(e) => setIda(e.target.value)}
+                required
+              />
+
+              {/* Vuelta (solo si es ida y vuelta) */}
+              {tripType === "round" && (
                 <input
                   type="date"
-                  className="bg-transparent outline-none text-sm text-gray-800 border border-gray-300 rounded px-2 py-1"
-                  value={ida}
-                  onChange={(e) => setIda(e.target.value)}
+                  className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
+                  value={vuelta}
+                  onChange={(e) => setVuelta(e.target.value)}
                   required
                 />
-              </div>
-            </div>
+              )}
 
-            {/* Vuelta (solo si ida y vuelta) */}
-            {tripType === "round" && (
-              <div className="flex items-center md:border-r md:border-purple-500 px-3 py-2 flex-1 min-w-[140px]">
-                <div className="flex flex-col w-full">
-                  <span className="text-gray-800 text-sm mb-1">Vuelta</span>
-                  <input
-                    type="date"
-                    className="bg-transparent outline-none text-sm text-gray-800 border border-gray-300 rounded px-2 py-1"
-                    value={vuelta}
-                    onChange={(e) => setVuelta(e.target.value)}
-                    required={tripType === "round"}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Clase */}
-            <div className="flex items-center md:border-r md:border-transparent px-3 py-2 flex-1 min-w-[130px]">
+              {/* Clase */}
               <select
-                className="w-full bg-transparent text-sm text-gray-800 outline-none appearance-none"
+                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
                 value={clase}
                 onChange={(e) => setClase(e.target.value)}
               >
@@ -203,24 +158,22 @@ export default function Home() {
                 <option value="premium">Premium</option>
                 <option value="ejec">Ejecutiva</option>
               </select>
-              <span className="ml-2 text-gray-600 text-xs">▼</span>
-            </div>
 
-            {/* Botón Buscar */}
-            <button
-              type="submit"
-              className="bg-purple-600 hover:bg-purple-700 text-white flex items-center justify-center
-                         px-4 py-2 rounded-md font-medium w-full md:w-auto"
-            >
-              🔍
-            </button>
+              {/* Botón */}
+              <button
+                type="submit"
+                className="bg-[#450d82] hover:bg-purple-800 text-white px-6 py-2 rounded-md font-medium transition-all shadow-md w-full md:w-auto"
+              >
+                Buscar ✈️
+              </button>
+            </div>
           </form>
         </div>
       </div>
 
       {/* DESTINOS */}
-      <section className="max-w-6xl mx-auto px-4 py-12">
-        <h2 className="text-center text-2xl font-bold mb-8 text-gray-800">
+      <section className="max-w-6xl mx-auto px-4 py-16">
+        <h2 className="text-center text-3xl font-bold mb-10 text-gray-800">
           Explora el mundo con AirLink
         </h2>
 
@@ -234,7 +187,7 @@ export default function Home() {
             <p className="text-gray-500 text-lg">No hay destinos disponibles</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {destinos.slice(0, 9).map((destino) => (
               <DestinationCard
                 key={destino.idDestino}
@@ -245,10 +198,10 @@ export default function Home() {
           </div>
         )}
 
-        <div className="text-center mt-10">
+        <div className="text-center mt-12">
           <Link
             to="/offers"
-            className="bg-purple-600 text-white px-6 py-3 rounded-lg shadow hover:bg-purple-700 transition"
+            className="bg-[#450d82] text-white px-8 py-3 rounded-lg shadow hover:bg-purple-800 transition-all"
           >
             Reserva tu destino ahora
           </Link>
@@ -256,16 +209,16 @@ export default function Home() {
       </section>
 
       {/* RESEÑAS */}
-      <section className="bg-white py-12">
-        <h2 className="text-center text-2xl font-bold mb-8 text-gray-800">
+      <section className="bg-white py-16">
+        <h2 className="text-center text-3xl font-bold mb-10 text-gray-800">
           Reseñas de nuestros clientes
         </h2>
 
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 px-4">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
           {[
             {
               id: 1,
-              nombre: "John D.",
+              nombre: "Julio Tapia.",
               cargo: "Traveler",
               texto:
                 "El servicio fue excelente, el vuelo cómodo y puntual. ¡Altamente recomendado!",
@@ -273,7 +226,7 @@ export default function Home() {
             },
             {
               id: 2,
-              nombre: "María S.",
+              nombre: "Alan Gajardo",
               cargo: "Traveler",
               texto:
                 "Muy buena experiencia con AirLink, fácil de reservar y excelente atención.",
@@ -281,7 +234,7 @@ export default function Home() {
             },
             {
               id: 3,
-              nombre: "Carlos R.",
+              nombre: "Daniel Sepúlveda",
               cargo: "Traveler",
               texto:
                 "Todo fue rápido y sin complicaciones. Definitivamente volveré a viajar con ellos.",
@@ -290,13 +243,13 @@ export default function Home() {
           ].map((r) => (
             <div
               key={r.id}
-              className="bg-gray-50 p-6 rounded-2xl shadow hover:shadow-md transition"
+              className="bg-gray-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all"
             >
               <div className="flex items-center gap-3 mb-3">
                 <img
-                  src={`https://randomuser.me/api/portraits/men/${r.id + 10}.jpg`}
+                  src={BannersHome}
                   alt={r.nombre}
-                  className="w-12 h-12 rounded-full object-cover"
+                  className="w-12 h-12 rounded-full object-cover border border-gray-300"
                 />
                 <div>
                   <h4 className="font-semibold">{r.nombre}</h4>
@@ -304,7 +257,7 @@ export default function Home() {
                 </div>
               </div>
               <p className="text-gray-600 text-sm mb-2">{r.texto}</p>
-              <div className="text-yellow-400">
+              <div className="text-yellow-400 text-lg">
                 {"★".repeat(r.rating)}
                 {"☆".repeat(5 - r.rating)}
               </div>
@@ -312,12 +265,7 @@ export default function Home() {
           ))}
         </div>
       </section>
-     {/* 🦶 Footer */}
-      <Footer />
+
     </div>
-   
- 
-
-
   );
 }
