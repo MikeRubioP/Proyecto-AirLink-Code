@@ -1,77 +1,124 @@
+// integrations/destinos.routes.js
 import express from "express";
 
-const router = express.Router();
+export const router = express.Router();
 
-// Obtener todos los destinos
+/**
+ * GET /destinos
+ * Query params:
+ *  - q: string (busca en nombre/ciudad/pais)
+ *  - destacado: "1"|"true" para solo destacados
+ *  - activo: "0"|"false" para inactivos, por defecto 1
+ *  - page: número (>=1)  default 1
+ *  - pageSize: número (1..50) default 12
+ *  - sort: "created_at" | "precio" | "nombre"  (default: created_at)
+ *  - dir: "asc" | "desc"  (default: desc)
+ */
 router.get("/", async (req, res) => {
   try {
     const db = req.app.get("db");
-    const { destacado, activo } = req.query;
 
-    let query = "SELECT * FROM destino WHERE 1=1";
-    const params = [];
+    const q = (req.query.q || "").trim();
+    const destacadoFlag =
+      req.query.destacado === "1" || req.query.destacado === "true";
+    const activoFlag =
+      req.query.activo === "0" || req.query.activo === "false" ? 0 : 1;
 
-    // Filtrar por destacado
-    if (destacado === "true" || destacado === "1") {
-      query += " AND destacado = 1";
+    const page = Math.max(1, parseInt(req.query.page ?? "1", 10) || 1);
+    const pageSize = Math.max(
+      1,
+      Math.min(50, parseInt(req.query.pageSize ?? "12", 10) || 12)
+    );
+    const offset = (page - 1) * pageSize;
+
+    const allowedSort = new Set(["created_at", "precio", "nombre"]);
+    const sort = allowedSort.has(String(req.query.sort))
+      ? String(req.query.sort)
+      : "created_at";
+    const dir = String(req.query.dir).toLowerCase() === "asc" ? "ASC" : "DESC";
+
+    const where = ["activo = ?"];
+    const params = [activoFlag];
+
+    if (destacadoFlag) where.push("destacado = 1");
+    if (q) {
+      where.push("(nombre LIKE ? OR ciudad LIKE ? OR pais LIKE ?)");
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
     }
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    // Filtrar por activo (por defecto solo activos)
-    if (activo === "false" || activo === "0") {
-      query += " AND activo = 0";
-    } else {
-      query += " AND activo = 1";
-    }
+    // Total
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) AS total FROM destino ${whereSql}`,
+      params
+    );
+    const total = countRows?.[0]?.total ?? 0;
 
-    query += " ORDER BY destacado DESC, created_at DESC";
+    // Lista (IMPORTANTE: LIMIT/OFFSET como literales numéricos ya validados)
+    const listSql = `
+      SELECT idDestino, nombre, precio, ciudad, pais, imagen, descripcion,
+             destacado, activo, created_at
+      FROM destino
+      ${whereSql}
+      ORDER BY ${sort} ${dir}
+      LIMIT ${pageSize} OFFSET ${offset}
+    `;
+    const [rows] = await db.query(listSql, params);
 
-    const [destinos] = await db.query(query, params);
-
-    res.status(200).json(destinos);
-  } catch (error) {
-    console.error("Error al obtener destinos:", error);
+    res.json({ total, page, pageSize, items: rows });
+  } catch (err) {
+    console.error("GET /destinos error:", err);
     res.status(500).json({ error: "Error al obtener destinos" });
   }
 });
 
-// Obtener un destino por ID
+/**
+ * GET /destinos/:id
+ */
 router.get("/:id", async (req, res) => {
   try {
     const db = req.app.get("db");
     const { id } = req.params;
 
-    const [destinos] = await db.query(
-      "SELECT * FROM destino WHERE idDestino = ?",
+    const [rows] = await db.query(
+      `SELECT idDestino, nombre, precio, ciudad, pais, imagen, descripcion,
+              destacado, activo, created_at
+       FROM destino
+       WHERE idDestino = ?`,
       [id]
     );
 
-    if (destinos.length === 0) {
+    if (!rows.length) {
       return res.status(404).json({ error: "Destino no encontrado" });
     }
-
-    res.status(200).json(destinos[0]);
-  } catch (error) {
-    console.error("Error al obtener destino:", error);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("GET /destinos/:id error:", err);
     res.status(500).json({ error: "Error al obtener destino" });
   }
 });
 
-// Crear un nuevo destino
+/**
+ * POST /destinos
+ * Body: { nombre, precio, ciudad, pais, imagen, descripcion?, destacado? }
+ * (activo se crea por defecto en 1)
+ */
 router.post("/", async (req, res) => {
   try {
     const db = req.app.get("db");
     const { nombre, precio, ciudad, pais, imagen, descripcion, destacado } =
-      req.body;
+      req.body || {};
 
-    // Validaciones
-    if (!nombre || !precio || !ciudad || !pais || !imagen) {
+    if (!nombre || precio == null || !ciudad || !pais || !imagen) {
       return res.status(400).json({
-        error: "Faltan campos requeridos: nombre, precio, ciudad, pais, imagen",
+        error:
+          "Faltan campos requeridos: nombre, precio, ciudad, pais, imagen",
       });
     }
 
     const [result] = await db.query(
-      `INSERT INTO destino (nombre, precio, ciudad, pais, imagen, descripcion, destacado, activo) 
+      `INSERT INTO destino
+         (nombre, precio, ciudad, pais, imagen, descripcion, destacado, activo)
        VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
       [
         nombre,
@@ -79,7 +126,7 @@ router.post("/", async (req, res) => {
         ciudad,
         pais,
         imagen,
-        descripcion || null,
+        descripcion ?? null,
         destacado ? 1 : 0,
       ]
     );
@@ -88,17 +135,22 @@ router.post("/", async (req, res) => {
       mensaje: "Destino creado exitosamente",
       idDestino: result.insertId,
     });
-  } catch (error) {
-    console.error("Error al crear destino:", error);
+  } catch (err) {
+    console.error("POST /destinos error:", err);
     res.status(500).json({ error: "Error al crear destino" });
   }
 });
 
-// Actualizar un destino
+/**
+ * PUT /destinos/:id
+ * Body permite actualizar cualquier campo: nombre, precio, ciudad, pais,
+ * imagen, descripcion, destacado, activo
+ */
 router.put("/:id", async (req, res) => {
   try {
     const db = req.app.get("db");
     const { id } = req.params;
+
     const {
       nombre,
       precio,
@@ -108,19 +160,17 @@ router.put("/:id", async (req, res) => {
       descripcion,
       destacado,
       activo,
-    } = req.body;
+    } = req.body || {};
 
-    // Verificar que el destino existe
-    const [destinos] = await db.query(
-      "SELECT * FROM destino WHERE idDestino = ?",
+    // Existe?
+    const [exists] = await db.query(
+      "SELECT idDestino FROM destino WHERE idDestino = ?",
       [id]
     );
-
-    if (destinos.length === 0) {
+    if (!exists.length) {
       return res.status(404).json({ error: "Destino no encontrado" });
     }
 
-    // Construir query dinámico
     const updates = [];
     const values = [];
 
@@ -157,7 +207,7 @@ router.put("/:id", async (req, res) => {
       values.push(activo ? 1 : 0);
     }
 
-    if (updates.length === 0) {
+    if (!updates.length) {
       return res.status(400).json({ error: "No hay campos para actualizar" });
     }
 
@@ -168,33 +218,81 @@ router.put("/:id", async (req, res) => {
       values
     );
 
-    res.status(200).json({ mensaje: "Destino actualizado exitosamente" });
-  } catch (error) {
-    console.error("Error al actualizar destino:", error);
+    res.json({ mensaje: "Destino actualizado exitosamente" });
+  } catch (err) {
+    console.error("PUT /destinos/:id error:", err);
     res.status(500).json({ error: "Error al actualizar destino" });
   }
 });
 
-// Eliminar un destino (soft delete)
+/**
+ * DELETE /destinos/:id  (soft delete → activo = 0)
+ */
 router.delete("/:id", async (req, res) => {
   try {
     const db = req.app.get("db");
     const { id } = req.params;
 
-    const [result] = await db.query(
+    const [r] = await db.query(
       "UPDATE destino SET activo = 0 WHERE idDestino = ?",
       [id]
     );
 
-    if (result.affectedRows === 0) {
+    if (r.affectedRows === 0) {
       return res.status(404).json({ error: "Destino no encontrado" });
     }
-
-    res.status(200).json({ mensaje: "Destino desactivado exitosamente" });
-  } catch (error) {
-    console.error("Error al eliminar destino:", error);
+    res.json({ mensaje: "Destino desactivado exitosamente" });
+  } catch (err) {
+    console.error("DELETE /destinos/:id error:", err);
     res.status(500).json({ error: "Error al eliminar destino" });
   }
 });
 
-export { router };
+/**
+ * PATCH /destinos/:id/activar    → activo = 1
+ */
+router.patch("/:id/activar", async (req, res) => {
+  try {
+    const db = req.app.get("db");
+    const { id } = req.params;
+
+    const [r] = await db.query(
+      "UPDATE destino SET activo = 1 WHERE idDestino = ?",
+      [id]
+    );
+    if (r.affectedRows === 0) {
+      return res.status(404).json({ error: "Destino no encontrado" });
+    }
+    res.json({ mensaje: "Destino activado" });
+  } catch (err) {
+    console.error("PATCH /destinos/:id/activar error:", err);
+    res.status(500).json({ error: "Error al activar destino" });
+  }
+});
+
+/**
+ * PATCH /destinos/:id/destacado
+ * Body: { value: boolean }
+ */
+router.patch("/:id/destacado", async (req, res) => {
+  try {
+    const db = req.app.get("db");
+    const { id } = req.params;
+    const value =
+      req.body?.value === true || req.body?.value === 1 || req.body?.value === "1"
+        ? 1
+        : 0;
+
+    const [r] = await db.query(
+      "UPDATE destino SET destacado = ? WHERE idDestino = ?",
+      [value, id]
+    );
+    if (r.affectedRows === 0) {
+      return res.status(404).json({ error: "Destino no encontrado" });
+    }
+    res.json({ mensaje: "Destino actualizado", destacado: !!value });
+  } catch (err) {
+    console.error("PATCH /destinos/:id/destacado error:", err);
+    res.status(500).json({ error: "Error al actualizar destacado" });
+  }
+});
