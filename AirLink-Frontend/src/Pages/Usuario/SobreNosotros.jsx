@@ -170,7 +170,7 @@ export default function SobreNosotros() {
         </div>
       </section>
 
-     
+
     </div>
   );
 }

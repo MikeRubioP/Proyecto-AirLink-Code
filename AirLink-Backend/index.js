@@ -35,6 +35,8 @@ const startServer = async () => {
     port:     process.env.DB_PORT     ? Number(process.env.DB_PORT) : 3306,
   });
 
+  console.log("✅ Conexión a la base de datos establecida");
+
   const app = express();
 
 
@@ -53,6 +55,7 @@ const startServer = async () => {
   app.use(express.urlencoded({ extended: true }));
 
 
+  // Archivos estáticos
   app.use("/uploads", express.static(path.join(__dirname, "uploads")));
   app.set("db", db);
 

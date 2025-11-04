@@ -129,7 +129,6 @@ export default function Ofertas() {
                     <p className="text-gray-500 text-lg">No hay ofertas disponibles en este momento</p>
                 </div>
             )}
-        
         </div>
     );
 }
@@ -200,7 +199,7 @@ function Carousel({ destinos }) {
                     <ChevronRight className="w-6 h-6 text-gray-700" />
                 </button>
             )}
-            
+
         </div>
     );
 }
@@ -264,11 +263,11 @@ function OfferCard({ destino }) {
                             OFF
                         </div>
                     </div>
-                    
+
                 </div>
-            
+
             </div>
-           
+
         </Link>
     );
 }

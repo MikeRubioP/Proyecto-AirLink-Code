@@ -75,24 +75,27 @@ const Footer = () => {
         </div>
       </div>
 
-      {/* 🟣 Línea inferior */}
-      <div className="border-t border-gray-200 py-4 text-center text-sm text-gray-500">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center px-6 gap-2">
-          <p>Copyright © 2025</p>
-          <p>
-            Todos los derechos reservados |{" "}
-            <a href="#" className="text-blue-600 hover:underline">
+      {/* Línea gris separadora + legal */}
+      <div className="border-t border-gray-200">
+        <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-[12px] text-gray-500">
+          <div className="whitespace-nowrap">Copyright © 2025</div>
+
+          <div className="text-center flex-1 text-gray-500">
+            Todos los derechos reservados |
+            <a
+              href="#"
+              className="text-gray-700 hover:text-purple-600 ml-1"
+            >
               Términos y condiciones
-            </a>{" "}
-            |{" "}
-            <a href="#" className="text-blue-600 hover:underline">
+            </a>
+            <span className="mx-1 text-gray-400">|</span>
+            <a href="#" className="text-gray-700 hover:text-purple-600">
               Política de privacidad
             </a>
-          </p>
+          </div>
         </div>
       </div>
     </footer>
   );
-};
-
+}
 export default Footer;

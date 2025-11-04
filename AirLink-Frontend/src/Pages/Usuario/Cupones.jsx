@@ -132,7 +132,7 @@ export default function Cupones() {
         </div>
       </section>
 
-     
+
     </div>
   );
 }
