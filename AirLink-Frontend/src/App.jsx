@@ -14,7 +14,7 @@ import SobreNosotros from "./Pages/Usuario/SobreNosotros";
 import MisViajes from "./Pages/Cliente/MisViajes";
 import CheckIn from "./Pages/Cliente/CheckIn";
 import MiCuenta from "./Pages/Cliente/Cuenta";
-import Asientos from "./Pages/Cliente/Asientos";
+import SeleccionAsientos from "./Pages/Vuelos/SeleccionAsientos";
 
 import BuscarVuelos from "./Pages/Vuelos/BuscarVuelos";
 
@@ -24,6 +24,7 @@ import Pago from "./Pages/Pago/Pago";
 import { VueloProvider } from "./Pages/Vuelos/context/VueloContext";
 import SeleccionVueloVuelta from "./Pages/Vuelos/SeleccionVueloVuelta";
 import DetalleViaje from "./Pages/Vuelos/DetalleViaje";
+import PagoExitoso from "./Pages/Pago/PagoExitoso";
 
 export default function App() {
   return (
@@ -51,10 +52,14 @@ export default function App() {
                 <Route path="/mi-cuenta" element={<MiCuenta />} />
                 {/* <Route path="/vuelos/:id" element={<DetalleVuelo />} /> */}
 
-                <Route path="/vuelos/asientos" element={<Asientos />} />
+                <Route path="/vuelos/seleccion-asiento" element={<SeleccionAsientos />} />
                 <Route path="/vuelos/buscar" element={<BuscarVuelos />} />
                 <Route path="/vuelos/vuelta" element={<SeleccionVueloVuelta />} />
                 <Route path="/vuelos/detalleviaje" element={<DetalleViaje />} />
+
+                {/* Pago */}¿
+                <Route path="/pago" element={<Pago />} />
+                <Route path="/pago-exitoso" element={<PagoExitoso />} />
 
 
                 {/* Flujo de compra de vuelos */}
@@ -68,8 +73,7 @@ export default function App() {
                 {/* Buses */}
                 <Route path="/buses" element={<BuscarBuses />} />
 
-                {/* Pago */}
-                <Route path="/pago" element={<Pago />} />
+
               </Routes>
             </Suspense>
           </main>
