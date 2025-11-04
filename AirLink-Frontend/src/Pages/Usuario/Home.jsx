@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DestinationCard from "../../Components/DestinationCard";
-import Footer from "../../Components/Footer";
 import BannersHome from "../../assets/BannersHome.png";
 import { useVuelo } from "../Vuelos/context/VueloContext.jsx";
 
@@ -47,6 +46,7 @@ export default function Home() {
 
     return () => { isMounted = false; };
   }, []);
+
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -207,7 +207,7 @@ export default function Home() {
 
         <div className="text-center mt-12">
           <Link
-            to="/offers"
+            to="/vuelos"
             className="bg-[#450d82] text-white px-8 py-3 rounded-lg shadow hover:bg-purple-800 transition-all"
           >
             Reserva tu destino ahora

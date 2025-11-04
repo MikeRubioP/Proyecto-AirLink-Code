@@ -28,7 +28,7 @@ export default function DetalleViaje() {
     };
 
     const continuarAAsientos = () => {
-        navigate("/vuelos/asientos", { state: datosViaje });
+        navigate("/vuelos/seleccion-asiento", { state: datosViaje });
     };
 
     return (
