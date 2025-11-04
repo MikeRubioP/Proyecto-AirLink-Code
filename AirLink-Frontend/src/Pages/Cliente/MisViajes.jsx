@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import QrButton from "../../Components/QrButton";
 
 const BRAND = "#7C4DFF";
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5174";
@@ -140,6 +141,19 @@ function ReservaCard({ r, onCheckin, onDetalle }) {
   const esPasado = new Date(r.salidaIso) <= new Date();
   const puedeCheckin = !esPasado && r.permiteCheckin;
 
+  const qrPayload = {
+    reserva: r.codigo,
+    pasajero: r.pasajero,
+    vuelo: r.vuelo,
+    origen: r.origen,
+    destino: r.destino,
+    salidaIso: r.salidaIso,
+    hSalida: r.hSalida,
+    hLlegada: r.hLlegada,
+    tarifa: r.tarifa || "",
+    equipaje: r.equipaje || "",
+  };
+
   return (
     <article className="rounded-3xl border border-[#E7E7ED] bg-white p-5 md:p-6 flex flex-col md:flex-row md:items-center gap-4">
       <div className="flex-1">
@@ -167,15 +181,14 @@ function ReservaCard({ r, onCheckin, onDetalle }) {
         >
           Ver detalle
         </button>
-        {puedeCheckin && (
-          <button
-            onClick={onCheckin}
-            className="px-4 py-2 rounded-xl text-white"
-            style={{ background: BRAND }}
-          >
-            Check-in
-          </button>
-        )}
+
+        {/* 🔳 BOTÓN VER QR (entre Ver detalle y el resto) */}
+        <QrButton
+          payload={qrPayload}
+          label="Ver QR"
+          className="px-4 py-2 rounded-xl border border-[#E7E7ED] bg-white hover:bg-[#fafafe]"
+        />
+
         {r.paseUrl && (
           <a
             href={r.paseUrl}
@@ -185,6 +198,15 @@ function ReservaCard({ r, onCheckin, onDetalle }) {
           >
             Descargar pase
           </a>
+        )}
+        {puedeCheckin && (
+          <button
+            onClick={onCheckin}
+            className="px-4 py-2 rounded-xl text-white"
+            style={{ background: BRAND }}
+          >
+            Check-in
+          </button>
         )}
       </div>
     </article>
