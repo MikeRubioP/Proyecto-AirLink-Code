@@ -192,19 +192,20 @@ const Pago = () => {
         pasajero: reservationSummary.pasajero
       });
 
-      const stripe = await stripePromise;
-      const { error } = await stripe.redirectToCheckout({
-        sessionId: response.data.sessionId
-      });
+      // Stripe ahora devuelve la URL del Checkout directamente
+      const { url } = response.data;
 
-      if (error) {
-        throw new Error(error.message);
+      if (url) {
+        window.location.href = url; // Redirige manualmente al Checkout
+      } else {
+        throw new Error('No se recibió una URL de Stripe.');
       }
     } catch (error) {
       console.error('Error en Stripe:', error);
       throw error;
     }
   };
+
 
   const procesarPagoMercadoPago = async (reservaId) => {
     try {

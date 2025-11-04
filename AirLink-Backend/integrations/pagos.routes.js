@@ -26,8 +26,7 @@ const paypalClient = new paypal.core.PayPalHttpClient(environment);
 // CONFIGURACIÓN DE MERCADO PAGO
 // ========================================
 const mpClient = new MercadoPagoConfig({
-  accessToken:
-    "TEST-1614782271695759-051601-12cf797b6738f1251fccf49822703022-1116207264",
+  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
 });
 
 // ========================================
@@ -72,39 +71,31 @@ router.post("/crear-reserva", async (req, res) => {
     const metodoPagoMap = {
       stripe: 1,
       mercadopago: 2,
-      paypal: 4, // PayPal
+      paypal: 4,
     };
 
     const idMetodoPago = metodoPagoMap[metodoPago] || 1;
 
-    // PASO 1: Buscar o crear usuario temporal (si no está autenticado)
-    // Por ahora usaremos el usuario administrador (idUsuario = 1)
-    // En producción deberías tener el usuario autenticado
-    const idUsuario = 1; // Usuario por defecto
+    // Usuario por defecto
+    const idUsuario = 1;
 
-    // PASO 2: Obtener el primer viaje para la reserva
+    // Obtener el primer viaje para la reserva
     const primerViajeId = viajeIds[0];
 
-    // PASO 3: Generar código de reserva único
+    // Generar código de reserva único
     const codigoReserva = generarCodigoReserva();
 
-    // PASO 4: Insertar reserva principal
+    // Insertar reserva principal
     const [reservaResult] = await connection.query(
       `INSERT INTO reserva 
         (codigo_reserva, idUsuario, idViaje, fecha_reserva, idTipoCategoria, estado, monto_total, moneda)
         VALUES (?, ?, ?, NOW(), ?, 'pendiente', ?, 'CLP')`,
-      [
-        codigoReserva,
-        idUsuario,
-        primerViajeId,
-        1, // 1 = Solo Ida (ajustar según tu lógica)
-        total,
-      ]
+      [codigoReserva, idUsuario, primerViajeId, 1, total]
     );
 
     const reservaId = reservaResult.insertId;
 
-    // PASO 5: Insertar pasajero asociado a la reserva
+    // Insertar pasajero asociado a la reserva
     const [pasajeroResult] = await connection.query(
       `INSERT INTO pasajero 
         (idReserva, nombrePasajero, apellidoPasajero, documento, tipo_documento, fecha_nacimiento, nacionalidad)
@@ -120,10 +111,7 @@ router.post("/crear-reserva", async (req, res) => {
 
     const idPasajero = pasajeroResult.insertId;
 
-    // PASO 6: Si hay múltiples buses/viajes, crear reservas adicionales o vincularlos
-    // Por simplicidad, guardaremos la info en una tabla temporal o en el mismo registro
-
-    // PASO 7: Insertar registro de pago pendiente
+    // Insertar registro de pago pendiente
     await connection.query(
       `INSERT INTO pago 
         (idReserva, idMetodoPago, idEstadoPago, monto, moneda, created_at)
@@ -166,7 +154,7 @@ router.post("/stripe/create-session", async (req, res) => {
           name: `${bus.empresa} - ${bus.origen} a ${bus.destino}`,
           description: `Salida: ${bus.horaSalida} - Llegada: ${bus.horaLlegada}`,
         },
-        unit_amount: Math.round(bus.precioAdulto), // Stripe requiere enteros
+        unit_amount: Math.round(bus.precioAdulto),
       },
       quantity: 1,
     }));
@@ -202,49 +190,88 @@ router.post("/stripe/create-session", async (req, res) => {
 // MERCADO PAGO - CREAR PREFERENCIA
 // ========================================
 router.post("/mercadopago/create-preference", async (req, res) => {
-  const { buses, reservaId, pasajero } = req.body;
-
   try {
-    const body = {
-      items: buses.map((bus) => ({
-        title: `${bus.empresa} - ${bus.origen} a ${bus.destino}`,
-        description: `Salida: ${bus.horaSalida} - Llegada: ${bus.horaLlegada}`,
-        quantity: 1,
-        unit_price: Number(bus.precioAdulto),
-        currency_id: "CLP",
-      })),
+    const { buses, reservaId, pasajero } = req.body;
+
+    console.log("📦 Datos recibidos para MercadoPago:", {
+      buses,
+      reservaId,
+      pasajero,
+    });
+
+    // Validar datos recibidos
+    if (!buses || !Array.isArray(buses) || buses.length === 0) {
+      return res.status(400).json({
+        error: "Buses inválidos o vacíos",
+        received: buses,
+      });
+    }
+
+    if (!reservaId) {
+      return res.status(400).json({ error: "reservaId es requerido" });
+    }
+
+    if (!pasajero || !pasajero.nombre || !pasajero.correo) {
+      return res.status(400).json({
+        error: "Datos de pasajero incompletos",
+        received: pasajero,
+      });
+    }
+
+    // Crear instancia de Preference
+    const preference = new Preference(mpClient);
+
+    // Preparar los items
+    const items = buses.map((bus) => ({
+      title: `${bus.empresa} - ${bus.origen} → ${bus.destino}`,
+      quantity: 1,
+      currency_id: "CLP",
+      unit_price: Number(bus.precioAdulto),
+    }));
+
+    console.log("🎫 Items preparados:", items);
+
+    // Crear la preferencia - SIN auto_return para evitar el error
+    const preferenceData = {
+      items: items,
       back_urls: {
         success: `http://localhost:5173/pago-exitoso?reservaId=${reservaId}&status=success`,
-        failure: `http://localhost:5173/pago?status=failure&reservaId=${reservaId}`,
-        pending: `http://localhost:5173/pago?status=pending&reservaId=${reservaId}`,
+        failure: `http://localhost:5173/pago-exitoso?reservaId=${reservaId}&status=failure`,
+        pending: `http://localhost:5173/pago-exitoso?reservaId=${reservaId}&status=pending`,
       },
-      auto_return: "approved",
+      // Removemos auto_return temporalmente para que funcione
+      external_reference: String(reservaId),
+      statement_descriptor: "AIRLINK",
       payer: {
         name: pasajero.nombre,
-        surname: pasajero.apellido,
+        surname: pasajero.apellido || "",
         email: pasajero.correo,
-        phone: {
-          number: pasajero.telefono,
-        },
-      },
-      metadata: {
-        reserva_id: reservaId.toString(),
       },
     };
 
-    const preference = new Preference(mpClient);
-    const result = await preference.create({ body });
+    console.log(
+      "📝 Preferencia a crear:",
+      JSON.stringify(preferenceData, null, 2)
+    );
 
+    const response = await preference.create({ body: preferenceData });
+
+    console.log("✅ Respuesta de MercadoPago:", response);
+
+    // Retornar el init_point
     res.json({
       success: true,
-      id: result.id,
-      init_point: result.init_point,
+      init_point: response.init_point,
+      id: response.id,
     });
   } catch (error) {
-    console.error("Error en Mercado Pago:", error);
+    console.error("❌ Error completo de MercadoPago:", error);
+    console.error("Stack:", error.stack);
+
     res.status(500).json({
       error: "Error al crear preferencia de Mercado Pago",
-      details: error.message,
+      message: error.message,
+      details: error.response?.data || error.toString(),
     });
   }
 });
@@ -256,7 +283,7 @@ router.post("/paypal/create-order", async (req, res) => {
   const { buses, reservaId, pasajero } = req.body;
 
   try {
-    const conversionRate = 900; // CLP a USD
+    const conversionRate = 900;
     const totalCLP = buses.reduce((sum, bus) => sum + bus.precioAdulto, 0);
     const totalUSD = (totalCLP / conversionRate).toFixed(2);
 
@@ -322,7 +349,7 @@ router.post("/paypal/create-order", async (req, res) => {
 router.put("/actualizar-estado/:reservaId", async (req, res) => {
   const db = req.app.get("db");
   const { reservaId } = req.params;
-  const { estado } = req.body; // 'pendiente', 'confirmada', 'cancelada'
+  const { estado } = req.body;
 
   try {
     await db.query("UPDATE reserva SET estado = ? WHERE idReserva = ?", [
@@ -330,11 +357,10 @@ router.put("/actualizar-estado/:reservaId", async (req, res) => {
       reservaId,
     ]);
 
-    // Actualizar también el estado del pago
     const estadoPagoMap = {
-      confirmada: 2, // Aprobado
-      cancelada: 3, // Rechazado
-      pendiente: 1, // Pendiente
+      confirmada: 2,
+      cancelada: 3,
+      pendiente: 1,
     };
 
     await db.query("UPDATE pago SET idEstadoPago = ? WHERE idReserva = ?", [
@@ -401,14 +427,54 @@ router.get("/reserva/:reservaId", async (req, res) => {
 });
 
 // ========================================
-// WEBHOOK STRIPE (para confirmar pagos)
+// WEBHOOK MERCADOPAGO
+// ========================================
+router.post("/mercadopago/webhook", async (req, res) => {
+  try {
+    const payment = req.query;
+    console.log("🔔 Webhook MercadoPago:", payment);
+
+    // MercadoPago envía notificaciones como query params
+    if (payment.type === "payment") {
+      const db = req.app.get("db");
+      const reservaId = payment.external_reference;
+
+      // Actualizar estado según el status del pago
+      if (payment.status === "approved") {
+        await db.query(
+          "UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?",
+          [reservaId]
+        );
+        await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [
+          reservaId,
+        ]);
+      } else if (payment.status === "rejected") {
+        await db.query(
+          "UPDATE reserva SET estado = 'cancelada' WHERE idReserva = ?",
+          [reservaId]
+        );
+        await db.query("UPDATE pago SET idEstadoPago = 3 WHERE idReserva = ?", [
+          reservaId,
+        ]);
+      }
+    }
+
+    res.status(200).send("OK");
+  } catch (error) {
+    console.error("Error en webhook MercadoPago:", error);
+    res.status(500).send("Error");
+  }
+});
+
+// ========================================
+// WEBHOOK STRIPE
 // ========================================
 router.post(
   "/stripe/webhook",
   express.raw({ type: "application/json" }),
   async (req, res) => {
     const sig = req.headers["stripe-signature"];
-    const webhookSecret = "whsec_tu_webhook_secret"; // Configura esto en Stripe
+    const webhookSecret = "whsec_tu_webhook_secret";
 
     let event;
 
@@ -419,12 +485,10 @@ router.post(
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    // Manejar el evento
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
       const reservaId = session.metadata.reservaId;
 
-      // Actualizar estado de la reserva a confirmada
       const db = req.app.get("db");
       await db.query(
         "UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?",

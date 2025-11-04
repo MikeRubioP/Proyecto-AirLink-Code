@@ -6,7 +6,6 @@ import Navbar from "./Components/Navbar";
 import Footer from "./Components/Footer";
 
 import Home from "./Pages/Usuario/Home";
-import Ofertas from "./Pages/Usuario/Ofertas";
 import Cupones from "./Pages/Usuario/Cupones";
 import Contacto from "./Pages/Usuario/Contacto";
 import SobreNosotros from "./Pages/Usuario/SobreNosotros";
@@ -18,13 +17,13 @@ import SeleccionAsientos from "./Pages/Vuelos/SeleccionAsientos";
 
 import BuscarVuelos from "./Pages/Vuelos/BuscarVuelos";
 
-import BuscarBuses from "./Pages/Buses/BuscarBuses";
 import Pago from "./Pages/Pago/Pago";
 
 import { VueloProvider } from "./Pages/Vuelos/context/VueloContext";
 import SeleccionVueloVuelta from "./Pages/Vuelos/SeleccionVueloVuelta";
 import DetalleViaje from "./Pages/Vuelos/DetalleViaje";
 import PagoExitoso from "./Pages/Pago/PagoExitoso";
+import Vuelos from "./Pages/Usuario/Vuelos";
 
 export default function App() {
   return (
@@ -41,7 +40,7 @@ export default function App() {
               <Routes>
                 {/* Público / usuario */}
                 <Route path="/" element={<Home />} />
-                <Route path="/ofertas" element={<Ofertas />} />
+                <Route path="/vuelos" element={<Vuelos />} />
                 <Route path="/cupones" element={<Cupones />} />
                 <Route path="/contacto" element={<Contacto />} />
                 <Route path="/sobre-nosotros" element={<SobreNosotros />} />
@@ -50,35 +49,19 @@ export default function App() {
                 <Route path="/mis-viajes" element={<MisViajes />} />
                 <Route path="/checkin" element={<CheckIn />} />
                 <Route path="/mi-cuenta" element={<MiCuenta />} />
-                {/* <Route path="/vuelos/:id" element={<DetalleVuelo />} /> */}
 
                 <Route path="/vuelos/seleccion-asiento" element={<SeleccionAsientos />} />
                 <Route path="/vuelos/buscar" element={<BuscarVuelos />} />
                 <Route path="/vuelos/vuelta" element={<SeleccionVueloVuelta />} />
                 <Route path="/vuelos/detalleviaje" element={<DetalleViaje />} />
 
-                {/* Pago */}¿
+                {/* Pago */}
                 <Route path="/pago" element={<Pago />} />
                 <Route path="/pago-exitoso" element={<PagoExitoso />} />
-
-
-                {/* Flujo de compra de vuelos */}
-                {/* <Route path="/vuelos" element={<VuelosLayout />}> */}
-                {/* <Route index element={<BuscarVuelos />} />
-                  <Route path="buscar" element={<BuscarVuelos />} /> */}
-                {/* <Route path="seleccionar-ida" element={<SeleccionIda />} />
-                  <Route path="resumen" element={<Resumen />} /> */}
-                {/* </Route> */}
-
-                {/* Buses */}
-                <Route path="/buses" element={<BuscarBuses />} />
-
 
               </Routes>
             </Suspense>
           </main>
-
-          {/* FOOTER fijo abajo */}
           <Footer />
         </div>
       </VueloProvider>

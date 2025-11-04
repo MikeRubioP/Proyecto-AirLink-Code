@@ -119,17 +119,6 @@ const Navbar = () => {
                         <div className="hidden md:block">
                             <div className="ml-10 flex items-baseline space-x-8">
 
-                                {/* ✅ NUEVO: Buscar pasajes */}
-                                <NavLink
-                                    to="/vuelos/buscar"
-                                    onClick={handleLinkClick}
-                                    className={({ isActive }) =>
-                                        `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
-                                    }
-                                >
-                                    Buscar pasajes
-                                </NavLink>
-
                                 <NavLink
                                     to="/"
                                     end
@@ -142,13 +131,13 @@ const Navbar = () => {
                                 </NavLink>
 
                                 <NavLink
-                                    to="/ofertas"
+                                    to="/Vuelos"
                                     onClick={handleLinkClick}
                                     className={({ isActive }) =>
                                         `${isActive ? desktopActive : desktopInactive} ${desktopBase}`
                                     }
                                 >
-                                    Ofertas
+                                    Vuelos
                                 </NavLink>
 
                                 {isAuthenticated && (

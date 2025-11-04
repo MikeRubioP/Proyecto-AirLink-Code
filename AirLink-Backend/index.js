@@ -142,14 +142,6 @@ const startServer = async () => {
       console.log("   - GET    /dpa");
       console.log("   - GET    /buses");
       console.log("   - GET    /vuelos");
-      console.log("   - POST   /pagos/crear-reserva");
-      console.log("   - POST   /pagos/stripe/create-session");
-      console.log("   - POST   /pagos/mercadopago/create-preference");
-      console.log("   - POST   /pagos/paypal/create-order");
-      console.log("   - GET    /api/countries");
-      console.log("   - GET    /api/geocoding");
-      console.log("   - GET    /health");
-      console.log("   - GET    /api/test");
     });
 
     // Manejo de cierre graceful

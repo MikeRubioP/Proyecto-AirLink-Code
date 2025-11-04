@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DestinationCard from "../../Components/DestinationCard";
-import Footer from "../../Components/Footer";
 import BannersHome from "../../assets/BannersHome.png";
 import { useVuelo } from "../Vuelos/context/VueloContext.jsx";
 
@@ -23,14 +22,27 @@ export default function Home() {
     fetch("http://localhost:5174/destinos")
       .then((res) => res.json())
       .then((data) => {
-        setDestinos(data);
+        console.log("📦 Datos recibidos:", data);
+
+        if (Array.isArray(data)) {
+          setDestinos(data);
+        } else if (Array.isArray(data.items)) {
+          // ✅ tu caso
+          setDestinos(data.items);
+        } else {
+          console.warn("⚠️ Formato inesperado en respuesta:", data);
+          setDestinos([]);
+        }
+
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Error cargando destinos:", err);
+        console.error("❌ Error cargando destinos:", err);
+        setDestinos([]);
         setLoading(false);
       });
   }, []);
+
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -200,7 +212,7 @@ export default function Home() {
 
         <div className="text-center mt-12">
           <Link
-            to="/offers"
+            to="/vuelos"
             className="bg-[#450d82] text-white px-8 py-3 rounded-lg shadow hover:bg-purple-800 transition-all"
           >
             Reserva tu destino ahora
