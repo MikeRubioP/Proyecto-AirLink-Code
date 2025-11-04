@@ -12,6 +12,9 @@ import { router as dpaRoutes } from "./dpa.routes.js";
 import { router as busesRoutes } from "./buses.routes.js";
 import { router as vuelosRoutes } from "./vuelos.routes.js"; // ⬅️ NUEVO
 
+import { countriesRoutes } from "./integrations/countries.routes.js";
+import { geocodingRoutes } from "./integrations/geocoding.routes.js";
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -69,6 +72,8 @@ const startServer = async () => {
       metodo: req.method,
     });
   });
+  app.use("/api/countries", countriesRoutes);
+  app.use("/api/geocoding", geocodingRoutes);
 
   app.listen(5174, () => {
     console.log("✅ Servidor corriendo en el puerto 5174");
