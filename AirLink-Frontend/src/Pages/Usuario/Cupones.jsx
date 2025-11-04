@@ -104,7 +104,7 @@ export default function Cupones() {
       <img
         src="src/assets/Banners.png"
         alt="Banner Cupones"
-        className="w-full h-48 md:h-64 object-cover"
+        className="w-full h-48 md:h-64 rounded-2xl shadow-sm object-cover"
       />
 
       {/* Hero Section */}
@@ -131,6 +131,8 @@ export default function Cupones() {
           ))}
         </div>
       </section>
+
+
     </div>
   );
 }
