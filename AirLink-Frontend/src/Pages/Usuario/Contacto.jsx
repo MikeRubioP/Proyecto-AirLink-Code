@@ -1,6 +1,12 @@
+// src/Pages/Usuario/Contacto.jsx
 import React, { useState } from "react";
 import Swal from "sweetalert2";
-import Footer from "../../Components/Footer";
+
+// --- helpers ---
+const trimMax = (s = "", n = 5000) => s.toString().trim().slice(0, n);
+const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// sanitizado simple para texto plano (evita tags en el backend si alguien mira logs)
+const plain = (s) => trimMax(s, 4000).replace(/[<>]/g, "");
 
 export default function Contacto() {
   const [form, setForm] = useState({
@@ -8,19 +14,47 @@ export default function Contacto() {
     email: "",
     asunto: "",
     mensaje: "",
+    hp: "", // honeypot: debe quedar vacío
   });
   const [sending, setSending] = useState(false);
 
-  function onChange(e) {
-    setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
-  }
+  const onChange = (e) => {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  };
 
-  async function onSubmit(e) {
+  const validate = () => {
+    const nombre = trimMax(form.nombre, 80);
+    const asunto = trimMax(form.asunto, 120);
+    const mensaje = trimMax(form.mensaje, 4000);
+
+    if (form.hp) return false; // bot detectado
+    if (nombre.length < 2) {
+      Swal.fire("Nombre inválido", "Ingresa tu nombre (mínimo 2 caracteres).", "warning");
+      return false;
+    }
+    if (!emailRx.test(form.email)) {
+      Swal.fire("Correo inválido", "Escribe un correo válido.", "warning");
+      return false;
+    }
+    if (asunto.length < 3) {
+      Swal.fire("Asunto inválido", "El asunto debe tener al menos 3 caracteres.", "warning");
+      return false;
+    }
+    if (mensaje.length < 10) {
+      Swal.fire("Mensaje muy corto", "Cuéntanos tu caso con más detalle (≥10 caracteres).", "warning");
+      return false;
+    }
+    return true;
+  };
+
+  const onSubmit = async (e) => {
     e.preventDefault();
+    if (!validate()) return;
 
     const confirm = await Swal.fire({
       title: "¿Deseas enviar el mensaje? 💌",
-      text: "Verifica que tus datos sean correctos antes de continuar.",
+      text: "Verifica que tus datos sean correctos.",
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Sí, enviar",
@@ -28,12 +62,37 @@ export default function Contacto() {
       confirmButtonColor: "#450d82",
       cancelButtonColor: "#aaa",
     });
-
     if (!confirm.isConfirmed) return;
 
     setSending(true);
     try {
-      await new Promise((r) => setTimeout(r, 700));
+      // payload “plano” (el backend debe parametrizar la inserción para evitar SQLi)
+      const payload = {
+        nombre: plain(form.nombre),
+        email: trimMax(form.email, 120),
+        asunto: plain(form.asunto),
+        mensaje: plain(form.mensaje),
+        // metadata útil (no confiar ciegamente en cliente)
+        meta: {
+          ua: navigator.userAgent,
+          tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+      };
+
+      const res = await fetch("http://localhost:5174/contacto", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          // Si implementas CSRF en backend, agrega aquí el header/token
+          // "X-CSRF-Token": getCsrfToken()
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(errText || "No se pudo enviar el mensaje");
+      }
 
       await Swal.fire({
         icon: "success",
@@ -42,18 +101,18 @@ export default function Contacto() {
         confirmButtonColor: "#450d82",
       });
 
-      setForm({ nombre: "", email: "", asunto: "", mensaje: "" });
+      setForm({ nombre: "", email: "", asunto: "", mensaje: "", hp: "" });
     } catch (error) {
       Swal.fire({
         icon: "error",
         title: "Error al enviar",
-        text: "Ocurrió un problema al enviar tu mensaje. Intenta nuevamente.",
+        text: error.message || "Ocurrió un problema. Intenta nuevamente.",
         confirmButtonColor: "#450d82",
       });
     } finally {
       setSending(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-[#F7F7FB] text-[#242424]">
@@ -76,7 +135,7 @@ export default function Contacto() {
         </div>
       </section>
 
-      {/* GRID: Formulario + Información */}
+      {/* GRID */}
       <section className="max-w-7xl mx-auto px-6 pb-16 grid lg:grid-cols-3 gap-8">
         {/* Formulario */}
         <div className="lg:col-span-2 rounded-3xl border border-[#E7E7ED] bg-white p-6 md:p-8 shadow-sm hover:shadow-md transition">
@@ -85,7 +144,19 @@ export default function Contacto() {
             Respondemos habitualmente en menos de 24 horas hábiles.
           </p>
 
-          <form onSubmit={onSubmit} className="space-y-4">
+          <form onSubmit={onSubmit} className="space-y-4" noValidate>
+            {/* Honeypot (oculto) */}
+            <input
+              type="text"
+              name="hp"
+              value={form.hp}
+              onChange={onChange}
+              autoComplete="off"
+              tabIndex={-1}
+              className="hidden"
+              aria-hidden="true"
+            />
+
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Nombre</label>
@@ -94,6 +165,7 @@ export default function Contacto() {
                   value={form.nombre}
                   onChange={onChange}
                   required
+                  maxLength={80}
                   className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-[#450d82] outline-none"
                   placeholder="Tu nombre"
                 />
@@ -106,6 +178,7 @@ export default function Contacto() {
                   value={form.email}
                   onChange={onChange}
                   required
+                  maxLength={120}
                   className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-[#450d82] outline-none"
                   placeholder="tucorreo@ejemplo.com"
                 />
@@ -119,6 +192,7 @@ export default function Contacto() {
                 value={form.asunto}
                 onChange={onChange}
                 required
+                maxLength={120}
                 className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-[#450d82] outline-none"
                 placeholder="Consulta, cambio de vuelo, reembolso…"
               />
@@ -132,9 +206,13 @@ export default function Contacto() {
                 onChange={onChange}
                 required
                 rows={6}
+                maxLength={4000}
                 className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-[#450d82] outline-none resize-y"
                 placeholder="Cuéntanos tu caso con el mayor detalle posible."
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Máx. 4000 caracteres. No adjuntes datos sensibles.
+              </p>
             </div>
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -189,13 +267,11 @@ export default function Contacto() {
           />
         </div>
       </section>
-
     </div>
   );
 }
 
 /* -------- Subcomponentes -------- */
-
 function ContactCard({ icon, title, lines = [] }) {
   return (
     <div className="rounded-2xl border border-[#E7E7ED] bg-white p-5 shadow-sm hover:shadow-md transition transform hover:-translate-y-1">
