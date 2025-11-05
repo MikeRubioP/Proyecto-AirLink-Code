@@ -66,21 +66,54 @@ router.post("/crear-reserva", async (req, res) => {
 
     // Determinar idViaje para la reserva (vuelo o primer bus)
     const primerViajeId =
-      (vuelo && vuelo.idViaje) || (Array.isArray(buses) && buses[0]?.id) || null;
+      (vuelo && vuelo.idViaje) ||
+      (Array.isArray(buses) && buses[0]?.id) ||
+      null;
 
     if (!primerViajeId) {
-      return res.status(400).json({ error: "Falta id de viaje (vuelo o bus)." });
+      return res
+        .status(400)
+        .json({ error: "Falta id de viaje (vuelo o bus)." });
     }
 
     connection = await db.getConnection();
     await connection.beginTransaction();
 
+    // ===== BUSCAR O CREAR USUARIO =====
+    let idUsuario;
+
+    // Buscar si existe usuario con este email
+    const [existingUser] = await connection.query(
+      "SELECT idUsuario FROM usuario WHERE email = ?",
+      [pasajero.correo]
+    );
+
+    if (existingUser.length > 0) {
+      // Usuario existe
+      idUsuario = existingUser[0].idUsuario;
+      console.log(`✅ Usuario encontrado: ${idUsuario}`);
+    } else {
+      // Crear usuario nuevo
+      console.log(`📝 Creando nuevo usuario para: ${pasajero.correo}`);
+
+      const [userResult] = await connection.query(
+        `INSERT INTO usuario 
+          (nombreUsuario, email, contrasena, idRol, verificado) 
+          VALUES (?, ?, ?, 1, 0)`,
+        [
+          `${pasajero.nombre} ${pasajero.apellido}`.trim(),
+          pasajero.correo,
+          "temp_password_" + Date.now(), // Password temporal
+        ]
+      );
+      idUsuario = userResult.insertId;
+      console.log(`✅ Usuario creado con ID: ${idUsuario}`);
+    }
+    // ===== FIN BUSCAR O CREAR USUARIO =====
+
     // Mapear método de pago a ID
     const metodoPagoMap = { stripe: 1, mercadopago: 2, paypal: 4 };
     const idMetodoPago = metodoPagoMap[metodoPago] || 1;
-
-    // Usuario por defecto (ajústalo si corresponde)
-    const idUsuario = 1;
 
     const codigoReserva = generarCodigoReserva();
 
@@ -104,7 +137,7 @@ router.post("/crear-reserva", async (req, res) => {
         pasajero.nombre,
         pasajero.apellido,
         pasajero.numeroDocumento,
-        pasajero.tipoDocumento || 'DNI',
+        pasajero.tipoDocumento || "DNI",
         pasajero.fechaNacimiento || null,
       ]
     );
@@ -124,6 +157,7 @@ router.post("/crear-reserva", async (req, res) => {
       reservaId,
       codigoReserva,
       pasajeroId: pasajeroResult.insertId,
+      usuarioId: idUsuario,
       message: "Reserva creada exitosamente",
     });
   } catch (error) {
@@ -170,7 +204,10 @@ router.post("/stripe/create-session", async (req, res) => {
           currency: "clp",
           product_data: {
             name: `${b.empresa} – ${b.origen} → ${b.destino}`,
-            description: b.horaSalida && b.horaLlegada ? `Salida: ${b.horaSalida} - Llegada: ${b.horaLlegada}` : undefined,
+            description:
+              b.horaSalida && b.horaLlegada
+                ? `Salida: ${b.horaSalida} - Llegada: ${b.horaLlegada}`
+                : undefined,
           },
           unit_amount: amount,
         },
@@ -187,18 +224,31 @@ router.post("/stripe/create-session", async (req, res) => {
       payment_method_types: ["card"],
       line_items,
       customer_email: pasajero?.correo,
-      success_url: `http://localhost:5173/pago-exitoso?reservaId=${encodeURIComponent(reservaId)}&status=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `http://localhost:5173/pago?status=cancel&reservaId=${encodeURIComponent(reservaId)}`,
+      success_url: `http://localhost:5173/pago-exitoso?reservaId=${encodeURIComponent(
+        reservaId
+      )}&status=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `http://localhost:5173/pago?status=cancel&reservaId=${encodeURIComponent(
+        reservaId
+      )}`,
       metadata: {
         reservaId: String(reservaId || ""),
-        pasajeroNombre: pasajero ? `${pasajero.nombre || ""} ${pasajero.apellido || ""}`.trim() : "",
+        pasajeroNombre: pasajero
+          ? `${pasajero.nombre || ""} ${pasajero.apellido || ""}`.trim()
+          : "",
       },
     });
 
-    res.status(200).json({ success: true, sessionId: session.id, url: session.url });
+    res
+      .status(200)
+      .json({ success: true, sessionId: session.id, url: session.url });
   } catch (error) {
     console.error("Error en Stripe:", error);
-    res.status(500).json({ error: "Error al crear sesión de Stripe", details: error.message });
+    res
+      .status(500)
+      .json({
+        error: "Error al crear sesión de Stripe",
+        details: error.message,
+      });
   }
 });
 
@@ -212,7 +262,8 @@ router.post("/mercadopago/create-preference", async (req, res) => {
     if (!vuelo && (!buses || buses.length === 0)) {
       return res.status(400).json({ error: "No hay items para cobrar." });
     }
-    if (!reservaId) return res.status(400).json({ error: "reservaId es requerido" });
+    if (!reservaId)
+      return res.status(400).json({ error: "reservaId es requerido" });
     if (!pasajero || !pasajero.nombre || !pasajero.correo) {
       return res.status(400).json({ error: "Datos de pasajero incompletos" });
     }
@@ -255,7 +306,11 @@ router.post("/mercadopago/create-preference", async (req, res) => {
     };
 
     const response = await preference.create({ body: preferenceData });
-    res.json({ success: true, init_point: response.init_point, id: response.id });
+    res.json({
+      success: true,
+      init_point: response.init_point,
+      id: response.id,
+    });
   } catch (error) {
     console.error("❌ Error completo de MercadoPago:", error);
     res.status(500).json({
@@ -279,7 +334,7 @@ router.post("/paypal/create-order", async (req, res) => {
 
     const conversionRate = 900; // CLP → USD (demo)
     const totalCLP =
-      (Number(vuelo?.precio || 0)) +
+      Number(vuelo?.precio || 0) +
       (buses || []).reduce((sum, b) => sum + Number(b.precioAdulto || 0), 0);
 
     const totalUSD = (totalCLP / conversionRate).toFixed(2);
@@ -289,7 +344,10 @@ router.post("/paypal/create-order", async (req, res) => {
     if (vuelo && Number(vuelo.precio) > 0) {
       items.push({
         name: `Vuelo ${vuelo.origen} → ${vuelo.destino} · ${vuelo.tarifaNombre}`,
-        unit_amount: { currency_code: "USD", value: (Number(vuelo.precio) / conversionRate).toFixed(2) },
+        unit_amount: {
+          currency_code: "USD",
+          value: (Number(vuelo.precio) / conversionRate).toFixed(2),
+        },
         quantity: "1",
       });
     }
@@ -297,8 +355,14 @@ router.post("/paypal/create-order", async (req, res) => {
     for (const b of buses || []) {
       items.push({
         name: `${b.empresa} – ${b.origen} → ${b.destino}`,
-        description: b.horaSalida && b.horaLlegada ? `${b.horaSalida} - ${b.horaLlegada}` : undefined,
-        unit_amount: { currency_code: "USD", value: (Number(b.precioAdulto || 0) / conversionRate).toFixed(2) },
+        description:
+          b.horaSalida && b.horaLlegada
+            ? `${b.horaSalida} - ${b.horaLlegada}`
+            : undefined,
+        unit_amount: {
+          currency_code: "USD",
+          value: (Number(b.precioAdulto || 0) / conversionRate).toFixed(2),
+        },
         quantity: "1",
       });
     }
@@ -336,7 +400,12 @@ router.post("/paypal/create-order", async (req, res) => {
     });
   } catch (error) {
     console.error("Error en PayPal:", error);
-    res.status(500).json({ error: "Error al crear orden de PayPal", details: error.message });
+    res
+      .status(500)
+      .json({
+        error: "Error al crear orden de PayPal",
+        details: error.message,
+      });
   }
 });
 
@@ -349,7 +418,10 @@ router.put("/actualizar-estado/:reservaId", async (req, res) => {
   const { estado } = req.body;
 
   try {
-    await db.query("UPDATE reserva SET estado = ? WHERE idReserva = ?", [estado, reservaId]);
+    await db.query("UPDATE reserva SET estado = ? WHERE idReserva = ?", [
+      estado,
+      reservaId,
+    ]);
 
     const estadoPagoMap = { confirmada: 2, cancelada: 3, pendiente: 1 };
     await db.query("UPDATE pago SET idEstadoPago = ? WHERE idReserva = ?", [
@@ -360,7 +432,12 @@ router.put("/actualizar-estado/:reservaId", async (req, res) => {
     res.json({ success: true, message: "Estado de reserva actualizado" });
   } catch (error) {
     console.error("Error al actualizar estado:", error);
-    res.status(500).json({ error: "Error al actualizar estado de reserva", details: error.message });
+    res
+      .status(500)
+      .json({
+        error: "Error al actualizar estado de reserva",
+        details: error.message,
+      });
   }
 });
 
@@ -377,11 +454,21 @@ router.post("/mercadopago/webhook", async (req, res) => {
       const reservaId = payment.external_reference;
 
       if (payment.status === "approved") {
-        await db.query("UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?", [reservaId]);
-        await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [reservaId]);
+        await db.query(
+          "UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?",
+          [reservaId]
+        );
+        await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [
+          reservaId,
+        ]);
       } else if (payment.status === "rejected") {
-        await db.query("UPDATE reserva SET estado = 'cancelada' WHERE idReserva = ?", [reservaId]);
-        await db.query("UPDATE pago SET idEstadoPago = 3 WHERE idReserva = ?", [reservaId]);
+        await db.query(
+          "UPDATE reserva SET estado = 'cancelada' WHERE idReserva = ?",
+          [reservaId]
+        );
+        await db.query("UPDATE pago SET idEstadoPago = 3 WHERE idReserva = ?", [
+          reservaId,
+        ]);
       }
     }
 
@@ -415,8 +502,13 @@ router.post(
       const reservaId = session.metadata?.reservaId;
 
       const db = req.app.get("db");
-      await db.query("UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?", [reservaId]);
-      await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [reservaId]);
+      await db.query(
+        "UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?",
+        [reservaId]
+      );
+      await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [
+        reservaId,
+      ]);
     }
 
     res.json({ received: true });
