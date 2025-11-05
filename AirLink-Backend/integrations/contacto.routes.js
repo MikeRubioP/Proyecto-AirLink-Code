@@ -1,6 +1,5 @@
 import { Router } from "express";
 import { z } from "zod";
-import mysql from "mysql2/promise";
 import nodemailer from "nodemailer";
 
 // Validación con Zod
@@ -20,16 +19,6 @@ const contactoSchema = z.object({
     .optional(),
 });
 
-// Pool de conexiones MySQL
-const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: process.env.DB_NAME,
-  waitForConnections: true,
-  connectionLimit: 10,
-});
-
 // Configurar Nodemailer (mismo patrón que en auth.routes.js)
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -39,17 +28,19 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Email de la empresa (donde llegarán los mensajes)
 const EMPRESA_EMAIL = process.env.EMPRESA_EMAIL || "soporte@airlink.com";
 
 const router = Router();
 
 router.post("/", async (req, res) => {
   try {
+    // ✅ Obtener el pool desde req.app
+    const pool = req.app.get("db");
+
     // Validar datos con Zod
     const data = contactoSchema.parse(req.body);
 
-    // 1. Guardar en base de datos (consulta parametrizada)
+    // 1. Guardar en base de datos
     const sql = `
       INSERT INTO contacto (nombre, email, asunto, mensaje, user_agent, timezone, created_at)
       VALUES (?, ?, ?, ?, ?, ?, NOW())
@@ -262,23 +253,29 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Endpoint opcional para verificar configuración de email
 router.get("/test-email", async (req, res) => {
   try {
+    // ✅ Verificar conexión a BD también
+    const pool = req.app.get("db");
+    await pool.query("SELECT 1");
+
+    // Verificar email
     await transporter.verify();
+
     res.json({
       ok: true,
-      message: "Configuración de email correcta",
+      message: "Configuración de email y BD correcta",
       from: process.env.EMAIL_USER,
       to: EMPRESA_EMAIL,
+      database: "connected",
     });
   } catch (error) {
     res.status(500).json({
       ok: false,
-      error: "Error en configuración de email",
+      error: "Error en configuración",
       details: error.message,
     });
   }
 });
 
-export default router;
+export { router };

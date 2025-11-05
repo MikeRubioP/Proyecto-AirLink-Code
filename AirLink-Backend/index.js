@@ -101,8 +101,7 @@ const startServer = async () => {
     app.use("/buses", busesRoutes);
 
     // contactoRouter ya viene con el prefijo /api/contacto internamente
-    app.use("/contacto", contactoRouter);
-
+    app.use("/contacto", contactoRoutes);
     // Vuelos montado en /vuelos
     app.use("/vuelos", vuelosRoutes);
 
