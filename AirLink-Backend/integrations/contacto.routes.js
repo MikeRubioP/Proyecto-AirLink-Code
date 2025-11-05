@@ -28,7 +28,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const EMPRESA_EMAIL = process.env.EMPRESA_EMAIL || "soporte@airlink.com";
+const EMPRESA_EMAIL = process.env.EMPRESA_EMAIL || "airlink.noreply@gmail.com";
 
 const router = Router();
 
