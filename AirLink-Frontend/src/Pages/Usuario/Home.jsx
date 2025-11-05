@@ -1,75 +1,164 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DestinationCard from "../../Components/DestinationCard";
 import BannersHome from "../../assets/BannersHome.png";
-import { useVuelo } from "../Vuelos/context/VueloContext.jsx";
 
 export default function Home() {
-  const [destinos, setDestinos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Hoy en ISO (para min en date)
+  const hoyISO = new Date().toISOString().split("T")[0];
 
+  // Navegación
   const navigate = useNavigate();
-  const { form, setForm } = useVuelo();
 
-  const [tripType, setTripType] = useState(form.fechaVuelta ? "round" : "oneway");
-  const [desde, setDesde] = useState(form.origen || "");
-  const [hacia, setHacia] = useState(form.destino || "");
-  const [ida, setIda] = useState(form.fechaIda || "");
-  const [vuelta, setVuelta] = useState(form.fechaVuelta || "");
-  const [clase, setClase] = useState(form.clase || "");
+  // Catálogo de destinos (tarjetas de abajo)
+  const [destinos, setDestinos] = useState([]);
+  const [loadingDestinos, setLoadingDestinos] = useState(true);
 
+  // Terminales para selects (cargados desde BD)
+  const [terminales, setTerminales] = useState([]);
+  const [loadingTerminales, setLoadingTerminales] = useState(true);
+
+  // Estado del buscador
+  const [tripType, setTripType] = useState("round");
+  const [desde, setDesde] = useState("SCL"); // default SCL
+  const [hacia, setHacia] = useState("");
+  const [ida, setIda] = useState(hoyISO);
+  const [vuelta, setVuelta] = useState("");
+
+  // Preview de vuelos en Home (desde la BD)
+  const [vuelosPreview, setVuelosPreview] = useState([]);
+  const [loadingVuelosPreview, setLoadingVuelosPreview] = useState(false);
+  const [errorPreview, setErrorPreview] = useState(null);
+
+  // Helpers
+  const fmtCLP = (n) =>
+    Number(n || 0).toLocaleString("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    });
+
+  const getLogoUrl = (logo) => {
+    if (!logo) return null;
+    if (logo.startsWith("http")) return logo;
+    return `http://localhost:5174${logo}`;
+  };
+
+  // ==== CARGA DE TERMINALES PARA SELECTS (BD) ====
   useEffect(() => {
-    fetch("http://localhost:5174/destinos")
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("📦 Datos recibidos:", data);
-        if (Array.isArray(data)) {
-          setDestinos(data);
-        } else if (Array.isArray(data.items)) {
-          setDestinos(data.items);
-        } else {
-          console.warn("⚠️ Formato inesperado en respuesta:", data);
-          setDestinos([]);
-        }
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("❌ Error cargando destinos:", err);
-        setDestinos([]);
-        setLoading(false);
-      });
+    const loadTerminales = async () => {
+      setLoadingTerminales(true);
+      try {
+        const res = await fetch("http://localhost:5174/vuelos/destinos");
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
+        setTerminales(list);
+      } catch (e) {
+        setTerminales([]);
+      } finally {
+        setLoadingTerminales(false);
+      }
+    };
+    loadTerminales();
   }, []);
 
+  // ==== CARGA DE DESTINOS PARA TARJETAS (ya lo usabas) ====
+  useEffect(() => {
+    const loadDestinos = async () => {
+      setLoadingDestinos(true);
+      try {
+        const res = await fetch("http://localhost:5174/destinos");
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : Array.isArray(data.items) ? data.items : [];
+        setDestinos(list);
+      } catch (e) {
+        setDestinos([]);
+      } finally {
+        setLoadingDestinos(false);
+      }
+    };
+    loadDestinos();
+  }, []);
+
+  // ==== PREVIEW DE VUELOS (cuando hay origen, destino y fecha) ====
+  const puedeBuscarPreview = useMemo(
+    () => Boolean(desde && hacia && ida),
+    [desde, hacia, ida]
+  );
+
+  useEffect(() => {
+    const fetchPreview = async () => {
+      if (!puedeBuscarPreview) {
+        setVuelosPreview([]);
+        return;
+      }
+      setLoadingVuelosPreview(true);
+      setErrorPreview(null);
+      try {
+        const url = `http://localhost:5174/vuelos/buscar?origen=${encodeURIComponent(
+          desde
+        )}&destino=${encodeURIComponent(hacia)}&fecha=${encodeURIComponent(
+          ida
+        )}&clase=eco`;
+
+        const r = await fetch(url);
+        if (!r.ok) throw new Error("Error al buscar vuelos");
+
+        const data = await r.json();
+
+        // Si quieres ordenar por precio desde
+        const enriched = await Promise.all(
+          data.map(async (v) => {
+            try {
+              const tr = await fetch(`http://localhost:5174/vuelos/viajes/${v.idViaje}/tarifas`);
+              const tarifas = tr.ok ? await tr.json() : [];
+              const precioDesde = tarifas.length
+                ? Math.min(...tarifas.map((t) => Number(t.precio)))
+                : Number(v.precio || 0);
+              return { ...v, tarifas, precioDesde };
+            } catch {
+              return { ...v, tarifas: [], precioDesde: Number(v.precio || 0) };
+            }
+          })
+        );
+
+        // Mostrar máximo 6 para no saturar la portada
+        enriched.sort((a, b) => a.precioDesde - b.precioDesde);
+        setVuelosPreview(enriched.slice(0, 6));
+      } catch (e) {
+        setErrorPreview("No se pudieron cargar vuelos para la combinación elegida.");
+        setVuelosPreview([]);
+      } finally {
+        setLoadingVuelosPreview(false);
+      }
+    };
+
+    fetchPreview();
+  }, [desde, hacia, ida, puedeBuscarPreview]);
+
+  // ==== SUBMIT BUSCADOR → a la página de resultados ====
   const handleSearch = (e) => {
     e.preventDefault();
 
     const payload = {
       origen: desde || "SCL",
       destino: hacia || "",
-      fechaIda: ida || "",
-      fechaVuelta: tripType === "round" ? (vuelta || "") : "",
-      clase: clase || "eco",
+      fechaIda: ida || hoyISO,
+      fechaVuelta: tripType === "round" ? vuelta || "" : "",
       tipoViaje: tripType === "round" ? "ida-vuelta" : "solo-ida",
       pasajeros: 1,
+      clase: "eco",
     };
 
-    // Guardar también en contexto si lo usas en otros pasos
-    setForm((prev) => ({
-      ...prev,
-      ...payload,
-      vueloIda: null,
-      vueloVuelta: null,
-    }));
-
-    // 🔁 redirige a la página de búsqueda con los datos
     navigate("/vuelos/buscar", { state: { search: payload } });
   };
 
+  // ==== RENDER ====
   return (
     <div className="bg-gray-50 min-h-screen flex flex-col">
       {/* HERO CON BUSCADOR */}
       <div
-        className="relative bg-cover bg-center h-[450px] md:h-[500px] rounded-b-3xl shadow-md overflow-hidden animate-gradient"
+        className="relative bg-cover bg-center h-[450px] md:h-[500px] rounded-b-3xl shadow-md overflow-hidden"
         style={{
           backgroundImage: `linear-gradient(to right bottom, rgba(69, 13, 130, 0.75), rgba(147, 51, 234, 0.45)), url(${BannersHome})`,
           backgroundBlendMode: "overlay",
@@ -79,17 +168,17 @@ export default function Home() {
       >
         {/* Contenido sobre el banner */}
         <div className="absolute inset-0 flex flex-col justify-center items-center text-center px-6">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 drop-shadow-lg animate-fade-in">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-6 drop-shadow-lg">
             ¿A dónde te gustaría ir?
           </h1>
 
-          {/* CONTENEDOR BUSCADOR */}
+          {/* CONTENEDOR BUSCADOR (rectángulo blanco) */}
           <form
             onSubmit={handleSearch}
-            className="w-full max-w-4xl bg-white/95 backdrop-blur-md border border-purple-200 shadow-lg rounded-2xl p-4 flex flex-col md:flex-row md:flex-wrap gap-3"
+            className="w-full max-w-5xl bg-white/95 backdrop-blur-md border border-purple-200 shadow-lg rounded-2xl p-5"
           >
             {/* Tipo de viaje */}
-            <div className="flex justify-center w-full gap-6 text-sm text-gray-700">
+            <div className="flex justify-center w-full gap-6 text-sm text-gray-700 mb-4">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -108,77 +197,95 @@ export default function Home() {
                   name="tripType"
                   value="oneway"
                   checked={tripType === "oneway"}
-                  onChange={() => setTripType("oneway")}
+                  onChange={() => {
+                    setTripType("oneway");
+                    setVuelta("");
+                  }}
                   className="text-purple-600 focus:ring-purple-600"
                 />
                 <span>Solo ida</span>
               </label>
             </div>
 
-            {/* Campos del buscador */}
-            <div className="flex flex-col md:flex-row gap-3 w-full">
+            {/* Fila de controles + botón dentro del mismo contenedor */}
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr_1fr_auto] gap-3 items-stretch">
               {/* Desde */}
               <select
-                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
+                className="h-12 bg-white border border-gray-300 rounded-xl px-3 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
                 value={desde}
                 onChange={(e) => setDesde(e.target.value)}
                 required
               >
-                <option value="">Desde</option>
-                <option value="SCL">Santiago</option>
-                <option value="LSC">La Serena</option>
-                <option value="CPO">Copiapó</option>
+                {/* Opciones desde BD */}
+                {loadingTerminales ? (
+                  <option value="">Cargando orígenes…</option>
+                ) : (
+                  <>
+                    {/* Valor por defecto si no viene SCL en BD */}
+                    {!terminales.some((t) => t.codigo === "SCL") && (
+                      <option value="SCL">Santiago (SCL)</option>
+                    )}
+                    {terminales.map((t) => (
+                      <option key={`o-${t.idTerminal || t.codigo}`} value={t.codigo}>
+                        {t.ciudad} ({t.codigo})
+                      </option>
+                    ))}
+                  </>
+                )}
               </select>
 
               {/* Hacia */}
               <select
-                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
+                className="h-12 bg-white border border-gray-300 rounded-xl px-3 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
                 value={hacia}
                 onChange={(e) => setHacia(e.target.value)}
                 required
               >
-                <option value="">Hacia</option>
-                <option value="MIA">Miami</option>
-                <option value="ANF">Antofagasta</option>
-                <option value="BUE">Buenos Aires</option>
+                <option value="">{loadingTerminales ? "Cargando destinos…" : "Hacia"}</option>
+                {!loadingTerminales &&
+                  terminales
+                    .filter((t) => t.codigo !== desde) // evitar mismo código
+                    .map((t) => (
+                      <option key={`d-${t.idTerminal || t.codigo}`} value={t.codigo}>
+                        {t.ciudad} ({t.codigo})
+                      </option>
+                    ))}
               </select>
 
               {/* Ida */}
               <input
                 type="date"
-                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
+                min={hoyISO}
+                className="h-12 bg-white border border-gray-300 rounded-xl px-3 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
                 value={ida}
-                onChange={(e) => setIda(e.target.value)}
+                onChange={(e) => {
+                  setIda(e.target.value);
+                  if (vuelta && e.target.value && e.target.value > vuelta) {
+                    setVuelta("");
+                  }
+                }}
                 required
               />
 
               {/* Vuelta (solo round trip) */}
-              {tripType === "round" && (
+              {tripType === "round" ? (
                 <input
                   type="date"
-                  className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
+                  min={ida || hoyISO}
+                  className="h-12 bg-white border border-gray-300 rounded-xl px-3 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
                   value={vuelta}
                   onChange={(e) => setVuelta(e.target.value)}
                   required
                 />
+              ) : (
+                <div className="hidden md:block" />
               )}
 
-              {/* Clase */}
-              <select
-                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
-                value={clase}
-                onChange={(e) => setClase(e.target.value)}
-              >
-                <option value="">Clase</option>
-                <option value="eco">Económica</option>
-                <option value="premium">Premium</option>
-                <option value="ejec">Ejecutiva</option>
-              </select>
-
-              {/* Botón */}
+              {/* Botón Buscar */}
               <button
                 type="submit"
-                className="bg-[#450d82] hover:bg-purple-800 text-white px-6 py-2 rounded-md font-medium transition-all shadow-md w-full md:w-auto"
+                className="h-12 px-6 bg-[#6b21a8] hover:bg-[#581c87] text-white rounded-xl font-medium shadow-md flex items-center justify-center gap-2"
+                title="Buscar vuelos"
               >
                 Buscar ✈️
               </button>
@@ -193,7 +300,7 @@ export default function Home() {
           Explora el mundo con AirLink
         </h2>
 
-        {loading ? (
+        {loadingDestinos ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Cargando destinos...</p>
@@ -206,7 +313,7 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {destinos.slice(0, 9).map((destino) => (
               <DestinationCard
-                key={destino.idDestino}
+                key={destino.idDestino ?? destino.idTerminal ?? `${destino.ciudad}-${destino.codigo}`}
                 destino={destino}
                 showLink={true}
               />
@@ -221,21 +328,6 @@ export default function Home() {
           >
             Reserva tu destino ahora
           </Link>
-        </div>
-      </section>
-
-      {/* RESEÑAS */}
-      <section className="bg-white py-16">
-        <h2 className="text-center text-3xl font-bold mb-10 text-gray-800">
-          Reseñas de nuestros clientes
-        </h2>
-
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
-          {[ /* ...tus reseñas... */ ].map((r) => (
-            <div key={r.id} className="bg-gray-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all">
-              {/* ... */}
-            </div>
-          ))}
         </div>
       </section>
     </div>

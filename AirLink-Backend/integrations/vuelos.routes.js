@@ -1,20 +1,24 @@
 // AirLink-Backend/integrations/vuelos.routes.js
 import express from "express";
 
-export const router = express.Router(); // ⬅️ export nombrado (coincide con tu import en index.js)
+export const router = express.Router();
 
 const like = (s) => `%${s}%`;
 
+// Util opcional para TZ (si guardas v.salida en UTC y comparas por fecha local)
+const dateCol = (tz) =>
+  tz ? `DATE(CONVERT_TZ(v.salida,'UTC','${tz}'))` : `DATE(v.salida)`;
+const timeCol = (col, tz) =>
+  tz ? `TIME_FORMAT(CONVERT_TZ(${col},'UTC','${tz}'), '%H:%i')` : `TIME_FORMAT(${col}, '%H:%i')`;
+
 /* ===========================
    BUSCAR VUELOS
-   GET /vuelos/buscar?origen=SCL&destino=PMC&fecha=2025-11-03&clase=eco
-   Devuelve: idViaje, horaSalida, horaLlegada, duracion, origen/destino, empresa, modelo,
-             precio (mínimo), tarifasDisponibles, asientosDisponibles, etc.
+   GET /vuelos/buscar?origen=SCL&destino=PMC&fecha=2025-11-03&clase=eco[&tz=America/Santiago]
 =========================== */
 router.get("/buscar", async (req, res) => {
   try {
     const db = req.app.get("db");
-    const { origen = "SCL", destino, fecha, clase } = req.query;
+    const { origen = "SCL", destino, fecha, clase, tz } = req.query;
 
     if (!destino || !fecha) {
       return res
@@ -36,10 +40,10 @@ router.get("/buscar", async (req, res) => {
       `
       SELECT
         v.idViaje,
-        DATE(v.salida)                                 AS fecha,
-        TIME_FORMAT(v.salida,  '%H:%i')                AS horaSalida,
-        TIME_FORMAT(v.llegada, '%H:%i')                AS horaLlegada,
-        TIMESTAMPDIFF(MINUTE, v.salida, v.llegada)     AS duracion,
+        ${dateCol(tz)}                              AS fecha,
+        ${timeCol("v.salida", tz)}                 AS horaSalida,
+        ${timeCol("v.llegada", tz)}                AS horaLlegada,
+        TIMESTAMPDIFF(MINUTE, v.salida, v.llegada) AS duracion,
 
         t1.codigo          AS origenCodigo,
         t1.ciudad          AS origenCiudad,
@@ -55,9 +59,9 @@ router.get("/buscar", async (req, res) => {
         eq.modelo,
         eq.matricula,
 
-        MIN(vt.precio)                         AS precio,               -- precio base (mínimo)
-        COUNT(DISTINCT vt.idTarifa)            AS tarifasDisponibles,   -- Nº de tarifas cargadas
-        SUM(vt.cupos)                          AS asientosDisponibles,
+        MIN(vt.precio)                      AS precio,
+        COUNT(DISTINCT vt.idTarifa)         AS tarifasDisponibles,
+        SUM(vt.cupos)                       AS asientosDisponibles,
         v.estado
       FROM viaje v
       JOIN ruta            r   ON v.idRuta           = r.idRuta
@@ -68,9 +72,9 @@ router.get("/buscar", async (req, res) => {
       LEFT JOIN viaje_tarifa vt ON v.idViaje         = vt.idViaje
       WHERE t1.codigo = ? 
         AND t2.codigo = ? 
-        AND DATE(v.salida) = ?
+        AND ${dateCol(tz)} = ?
         AND v.estado = 'programado'
-        AND vt.cupos > 0
+        AND (vt.cupos IS NULL OR vt.cupos > 0)      -- más tolerante si no hay tarifas/cupos aún
       GROUP BY v.idViaje, v.salida, v.llegada,
                t1.codigo, t1.ciudad, t1.nombreTerminal,
                t2.codigo, t2.ciudad, t2.nombreTerminal,
@@ -84,6 +88,58 @@ router.get("/buscar", async (req, res) => {
   } catch (error) {
     console.error("❌ Error buscando vuelos:", error);
     res.status(500).json({ error: "Error al buscar vuelos", message: error.message });
+  }
+});
+
+/* ===========================
+   DISPONIBILIDAD POR DÍA (tira semanal)
+   GET /vuelos/disponibilidad?origen=SCL&destino=PMC&desde=2025-11-03&dias=7[&tz=America/Santiago]
+   Devuelve [{fecha, vuelos, minPrecio}]
+=========================== */
+router.get("/disponibilidad", async (req, res) => {
+  try {
+    const db = req.app.get("db");
+    const { origen = "SCL", destino, desde, dias = 7, tz } = req.query;
+
+    if (!destino || !desde) {
+      return res.status(400).json({
+        error: "Parámetros requeridos: destino, desde (YYYY-MM-DD)",
+      });
+    }
+
+    // Si viene ciudad en vez de código IATA
+    let destinoCodigo = destino;
+    if (destino && destino.length > 3) {
+      const [terminalResult] = await db.query(
+        `SELECT codigo FROM terminal WHERE ciudad LIKE ? LIMIT 1`,
+        [like(destino)]
+      );
+      if (terminalResult.length > 0) destinoCodigo = terminalResult[0].codigo;
+    }
+
+    const q = `
+      SELECT
+        ${dateCol(tz)} AS fecha,
+        COUNT(DISTINCT v.idViaje) AS vuelos,
+        MIN(vt.precio) AS minPrecio
+      FROM viaje v
+      JOIN ruta r               ON v.idRuta = r.idRuta
+      JOIN terminal t1          ON r.idTerminalOrigen  = t1.idTerminal
+      JOIN terminal t2          ON r.idTerminalDestino = t2.idTerminal
+      LEFT JOIN viaje_tarifa vt ON vt.idViaje = v.idViaje
+      WHERE t1.codigo = ? AND t2.codigo = ?
+        AND ${dateCol(tz)} BETWEEN ? AND DATE_ADD(?, INTERVAL ? DAY)
+        AND v.estado = 'programado'
+        AND (vt.cupos IS NULL OR vt.cupos > 0)
+      GROUP BY ${dateCol(tz)}
+      ORDER BY fecha ASC
+    `;
+    const [rows] = await db.query(q, [origen, destinoCodigo, desde, desde, Number(dias) - 1]);
+
+    res.json(rows); // [{fecha:'2025-11-03', vuelos:2, minPrecio:87990}, ...]
+  } catch (error) {
+    console.error("❌ Error en disponibilidad:", error);
+    res.status(500).json({ error: "Error al obtener disponibilidad", message: error.message });
   }
 });
 
@@ -133,17 +189,14 @@ router.get("/destinos", async (req, res) => {
 });
 
 /* ===========================
-   TARIFAS POR VIAJE (para el modal de tarifas)
+   TARIFAS POR VIAJE (modal de tarifas)
    GET /vuelos/viajes/:idViaje/tarifas
-   Devuelve cada tarifa con su precio/cupos y metadatos de tarifa/cabina
 =========================== */
 router.get("/viajes/:idViaje/tarifas", async (req, res) => {
   const db = req.app.get("db");
   const { idViaje } = req.params;
 
   try {
-    console.log("➡️  GET /vuelos/viajes/:idViaje/tarifas", idViaje);
-
     const [rows] = await db.query(
       `
       SELECT
@@ -161,7 +214,7 @@ router.get("/viajes/:idViaje/tarifas", async (req, res) => {
         cc.nombreCabinaClase,
         cc.descripcion AS descripcionCabina
       FROM viaje_tarifa vt
-      JOIN tarifa       t  ON t.idTarifa      = vt.idTarifa
+      JOIN tarifa       t  ON t.idTarifa       = vt.idTarifa
       JOIN cabina_clase cc ON cc.idCabinaClase = t.idCabinaClase
       WHERE vt.idViaje = ?
       ORDER BY vt.idTarifa ASC
@@ -169,7 +222,6 @@ router.get("/viajes/:idViaje/tarifas", async (req, res) => {
       [idViaje]
     );
 
-    // Devolvemos arreglo (vacío si no hay) → NO 404
     return res.json(rows);
   } catch (err) {
     console.error("❌ Error obteniendo tarifas:", err);
@@ -218,7 +270,6 @@ router.get("/:idViaje", async (req, res) => {
       return res.status(404).json({ error: "Vuelo no encontrado" });
     }
 
-    // (Opcional) Traer tarifas aquí también si quieres un detalle completo
     const [tarifas] = await db.query(
       `
       SELECT 
