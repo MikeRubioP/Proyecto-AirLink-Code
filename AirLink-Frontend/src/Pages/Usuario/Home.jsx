@@ -158,7 +158,7 @@ export default function Home() {
     <div className="bg-gray-50 min-h-screen flex flex-col">
       {/* HERO CON BUSCADOR */}
       <div
-        className="relative bg-cover bg-center h-[450px] md:h-[500px] rounded-b-3xl shadow-md overflow-hidden"
+        className="relative bg-cover bg-center h-[450px] md:h-[500px] rounded-b-3xl shadow-md overflow-hidden animate-gradient"
         style={{
           backgroundImage: `linear-gradient(to right bottom, rgba(69, 13, 130, 0.75), rgba(147, 51, 234, 0.45)), url(${BannersHome})`,
           backgroundBlendMode: "overlay",
