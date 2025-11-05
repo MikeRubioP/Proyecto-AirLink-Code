@@ -12,18 +12,16 @@ import { router as authRoutes } from "./auth.routes.js";
 import { router as destinosRoutes } from "./integrations/destinos.routes.js";
 import { router as dpaRoutes } from "./integrations/dpa.routes.js";
 import { router as busesRoutes } from "./integrations/buses.routes.js";
-import { router as vuelosRoutes } from "./vuelos.routes.js";
+import { router as vuelosRoutes } from "./integrations/vuelos.routes.js";
 import { router as uploadRoutes } from "./integrations/upload.routes.js";
 import { router as pagosRoutes } from "./integrations/pagos.routes.js";
 import { countriesRoutes } from "./integrations/countries.routes.js";
 import { geocodingRoutes } from "./integrations/geocoding.routes.js";
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "*")
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
@@ -32,10 +30,10 @@ const startServer = async () => {
   try {
     // Conexión a la base de datos con pool
     const db = await mysql.createPool({
-      host: "localhost",
-      user: "airlink",
-      password: "airlink",
-      database: "Airlink",
+      host: process.env.DB_HOST || "localhost",
+      user: process.env.DB_USER || "airlink",
+      password: process.env.DB_PASS || "airlink",
+      database: process.env.DB_NAME || "Airlink",
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -47,10 +45,10 @@ const startServer = async () => {
 
     const app = express();
 
-    // CORS - CORREGIDO
+    // CORS
     app.use(
       cors({
-        origin: "http://localhost:5173",
+        origin: ALLOWED_ORIGINS,
         credentials: true,
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
         allowedHeaders: ["Content-Type", "Authorization"],
@@ -61,21 +59,24 @@ const startServer = async () => {
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
 
-    // Archivos estáticos
+    // Archivos estáticos (logos/imagenes)
     app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-    // Inyecta DB para usarlo en middlewares/rutas
+    // Inyecta DB
     app.set("db", db);
 
     // ====================================
-    // TODAS LAS RUTAS - ANTES DEL 404
+    // RUTAS (antes del 404)
     // ====================================
     app.use("/auth", authRoutes);
     app.use("/upload", uploadRoutes);
     app.use("/destinos", destinosRoutes);
     app.use("/dpa", dpaRoutes);
     app.use("/buses", busesRoutes);
+
+    // 🔧 Aquí el cambio clave: montar en /vuelos (no /api/vuelos)
     app.use("/vuelos", vuelosRoutes);
+
     app.use("/pagos", pagosRoutes);
     app.use("/api/countries", countriesRoutes);
     app.use("/api/geocoding", geocodingRoutes);
@@ -106,11 +107,7 @@ const startServer = async () => {
       }
     });
 
-    // ====================================
-    // MANEJO DE ERRORES - AL FINAL
-    // ====================================
-
-    // 404 Handler - DESPUÉS de todas las rutas
+    // 404
     app.use((req, res) => {
       console.log("⚠️ Ruta no encontrada:", req.method, req.path);
       res.status(404).json({
@@ -120,7 +117,7 @@ const startServer = async () => {
       });
     });
 
-    // Error Handler global
+    // Error handler
     app.use((err, req, res, next) => {
       console.error("❌ Error:", err);
       res.status(err.status || 500).json({
@@ -129,22 +126,23 @@ const startServer = async () => {
       });
     });
 
-    // Iniciar servidor
-    const PORT = process.env.PORT || 5174;
+    // Start
     app.listen(PORT, () => {
       console.log(`✅ Servidor corriendo en el puerto ${PORT}`);
       console.log(`🌍 http://localhost:${PORT}`);
-      console.log("\n📍 Rutas disponibles:");
+      console.log("\n📍 Rutas disponibles principales:");
       console.log("   - POST   /auth/login");
       console.log("   - POST   /auth/register");
       console.log("   - POST   /upload");
       console.log("   - GET    /destinos");
       console.log("   - GET    /dpa");
       console.log("   - GET    /buses");
-      console.log("   - GET    /vuelos");
+      console.log("   - GET    /vuelos/buscar");
+      console.log("   - GET    /vuelos/destinos");
+      console.log("   - GET    /vuelos/:idViaje");
     });
 
-    // Manejo de cierre graceful
+    // Cierre graceful
     process.on("SIGTERM", async () => {
       console.log("📴 SIGTERM recibido, cerrando servidor...");
       await db.end();

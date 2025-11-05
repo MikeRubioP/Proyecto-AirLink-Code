@@ -5,7 +5,8 @@ export default function BuscarVuelos() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const destinoInfo = location.state?.destinoInfo;
+  const destinoInfo = location.state?.destinoInfo; // si vienes desde una tarjeta
+  const searchState = location.state?.search;      // si vienes desde Home (navigate con state)
 
   // Estados para el formulario de búsqueda
   const [origen, setOrigen] = useState("SCL");
@@ -26,10 +27,20 @@ export default function BuscarVuelos() {
   // Estados para el calendario de fechas
   const [fechasDisponibles, setFechasDisponibles] = useState([]);
 
+  // ---- helpers ----
+  const fmtCLP = (n) =>
+    Number(n || 0).toLocaleString("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    });
+
   // Función para obtener el código de terminal desde la ciudad
   const obtenerCodigoCiudad = async (ciudad) => {
     try {
-      const response = await fetch(`http://localhost:5174/vuelos/destinos/${encodeURIComponent(ciudad)}/codigo`);
+      const response = await fetch(
+        `http://localhost:5174/vuelos/destinos/${encodeURIComponent(ciudad)}/codigo`
+      );
       if (response.ok) {
         const data = await response.json();
         return data.codigo;
@@ -40,50 +51,74 @@ export default function BuscarVuelos() {
     return null;
   };
 
-  // Efecto para configurar destino desde destinoInfo
+  // Inicializa desde state (Home) o desde destinoInfo o fecha por defecto
   useEffect(() => {
-    const configurarDestino = async () => {
-      if (destinoInfo?.ciudad) {
-        const codigo = await obtenerCodigoCiudad(destinoInfo.ciudad);
-        if (codigo) {
-          setDestino(codigo);
+    const init = async () => {
+      if (searchState) {
+        setOrigen(searchState.origen ?? "SCL");
+        setDestino(searchState.destino ?? "");
+        setFechaIda(searchState.fechaIda ?? new Date().toISOString().split("T")[0]);
+        setFechaVuelta(searchState.fechaVuelta ?? "");
+        setTipoViaje(searchState.tipoViaje ?? "solo-ida");
+        setClase(searchState.clase ?? "eco");
+        setPasajeros(searchState.pasajeros ?? 1);
+      } else {
+        if (destinoInfo?.ciudad) {
+          const codigo = await obtenerCodigoCiudad(destinoInfo.ciudad);
+          if (codigo) setDestino(codigo);
         }
+        setFechaIda((prev) => prev || new Date().toISOString().split("T")[0]);
       }
     };
-    configurarDestino();
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
-    // Establecer fecha de hoy por defecto
-    const hoy = new Date().toISOString().split('T')[0];
-    setFechaIda(hoy);
-  }, [destinoInfo]);
-
-  // Efecto para buscar vuelos cuando cambian los parámetros
+  // Buscar cuando cambian parámetros relevantes
   useEffect(() => {
     if (origen && destino && fechaIda) {
       buscarVuelos();
+      generarFechasDisponibles();
     }
-  }, [origen, destino, fechaIda, ordenamiento]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [origen, destino, fechaIda, clase, ordenamiento]);
 
+  // ---- API: buscar vuelos y adjuntar tarifas ----
   const buscarVuelos = async () => {
     setLoading(true);
     setError(null);
 
     try {
       const response = await fetch(
-        `http://localhost:5174/vuelos/buscar?` +
-        `origen=${origen}&destino=${destino}&fecha=${fechaIda}&clase=${clase}`
+        `http://localhost:5174/vuelos/buscar?origen=${origen}&destino=${destino}&fecha=${fechaIda}&clase=${clase}`
       );
 
       if (!response.ok) {
-        throw new Error('Error al buscar vuelos');
+        throw new Error("Error al buscar vuelos");
       }
 
       const data = await response.json();
 
+      // Trae tarifas por cada vuelo en paralelo y calcula precioDesde (mínimo)
+      const withTarifas = await Promise.all(
+        data.map(async (v) => {
+          try {
+            const r = await fetch(`http://localhost:5174/vuelos/viajes/${v.idViaje}/tarifas`);
+            const tarifas = r.ok ? await r.json() : [];
+            const minTarifa = tarifas.length
+              ? Math.min(...tarifas.map((t) => Number(t.precio)))
+              : Number(v.precio || 0);
+            return { ...v, tarifas, precioDesde: minTarifa };
+          } catch {
+            return { ...v, tarifas: [], precioDesde: Number(v.precio || 0) };
+          }
+        })
+      );
+
       // Ordenar según criterio seleccionado
-      let vuelosOrdenados = [...data];
+      let vuelosOrdenados = [...withTarifas];
       if (ordenamiento === "baratos") {
-        vuelosOrdenados.sort((a, b) => a.precio - b.precio);
+        vuelosOrdenados.sort((a, b) => a.precioDesde - b.precioDesde);
       } else if (ordenamiento === "rapidos") {
         vuelosOrdenados.sort((a, b) => a.duracion - b.duracion);
       } else if (ordenamiento === "temprano") {
@@ -91,7 +126,6 @@ export default function BuscarVuelos() {
       }
 
       setVuelos(vuelosOrdenados);
-      generarFechasDisponibles();
     } catch (error) {
       console.error("Error buscando vuelos:", error);
       setError("No se pudieron cargar los vuelos. Intenta nuevamente.");
@@ -109,36 +143,43 @@ export default function BuscarVuelos() {
       const fecha = new Date(fechaBase);
       fecha.setDate(fechaBase.getDate() + i);
       fechas.push({
-        fecha: fecha.toISOString().split('T')[0],
-        dia: fecha.toLocaleDateString('es-ES', { weekday: 'short' }),
+        fecha: fecha.toISOString().split("T")[0],
+        dia: fecha.toLocaleDateString("es-ES", { weekday: "short" }),
         numero: fecha.getDate(),
-        mes: fecha.toLocaleDateString('es-ES', { month: 'short' })
+        mes: fecha.toLocaleDateString("es-ES", { month: "short" }),
       });
     }
     setFechasDisponibles(fechas);
   };
 
-  const seleccionarVuelo = (vuelo) => {
-    // Asegúrate de incluir TODOS los datos necesarios
+  // Actualizado para aceptar vuelo con tarifaElegida
+  const seleccionarVuelo = (vueloConTarifa) => {
+    const t = vueloConTarifa?.tarifaElegida;
+
     const datosVuelo = {
-      vueloIda: vuelo,
-      origen: origen,      // Código del origen (ej: "SCL")
-      destino: destino,    // Código del destino (ej: "PMC")
-      fechaIda: fechaIda,  // Fecha del vuelo de ida
-      clase: clase,        // Clase del vuelo (ej: "eco")
-      pasajeros: pasajeros // Número de pasajeros
+      vueloIda: vueloConTarifa,
+      tarifaIda: t
+        ? {
+            idTarifa: t.idTarifa,
+            nombre: t.nombre || t.nombreTarifa,
+            precio: Number(t.precio),
+            moneda: t.moneda,
+            cupos: t.cupos,
+          }
+        : null,
+      origen,
+      destino,
+      fechaIda,
+      fechaVuelta,
+      clase,
+      pasajeros,
     };
 
-    // Guardar en localStorage
-    localStorage.setItem('vueloSeleccionado', JSON.stringify(datosVuelo));
-
-    console.log('Datos del vuelo a enviar:', datosVuelo); // Para debugging
+    localStorage.setItem("vueloSeleccionado", JSON.stringify(datosVuelo));
 
     if (tipoViaje === "ida-vuelta") {
-      // Navegar a la selección de vuelo de vuelta
       navigate("/vuelos/vuelta", { state: datosVuelo });
     } else {
-      // Navegar al home o página de confirmación
       navigate("/vuelos/detalleviaje", { state: datosVuelo });
     }
   };
@@ -152,7 +193,7 @@ export default function BuscarVuelos() {
   // Función para obtener URL completa del logo
   const getLogoUrl = (logo) => {
     if (!logo) return null;
-    if (logo.startsWith('http')) return logo;
+    if (logo.startsWith("http")) return logo;
     return `http://localhost:5174${logo}`;
   };
 
@@ -163,9 +204,10 @@ export default function BuscarVuelos() {
         <div
           className="bg-cover bg-center py-8"
           style={{
-            backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${getLogoUrl(destinoInfo.imagen)})`,
+            backgroundImage: `linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.5)), url(${getLogoUrl(
+              destinoInfo.imagen
+            )})`,
           }}
-
         >
           <div className="max-w-7xl mx-auto px-4">
             <h1 className="text-white text-3xl font-bold mb-2">
@@ -175,13 +217,13 @@ export default function BuscarVuelos() {
               {destinoInfo.ciudad}, {destinoInfo.pais}
             </p>
             <p className="text-white/90 text-sm mt-2">
-              Desde ${Number(destinoInfo.precio).toLocaleString('es-CL')} por persona
+              Desde {fmtCLP(destinoInfo.precio)} por persona
             </p>
           </div>
         </div>
       )}
 
-      {/* Selector de fechas - CENTRADO */}
+      {/* Selector de fechas */}
       {fechasDisponibles.length > 0 && (
         <div className="bg-white border-b py-6">
           <div className="max-w-4xl mx-auto px-4">
@@ -193,16 +235,25 @@ export default function BuscarVuelos() {
                 <button
                   key={f.fecha}
                   onClick={() => setFechaIda(f.fecha)}
-                  className={`px-6 py-3 rounded-lg border-2 transition-all ${fechaIda === f.fecha
-                    ? 'border-purple-600 bg-purple-600 text-white shadow-lg transform scale-105'
-                    : 'border-gray-200 hover:border-purple-300 hover:shadow-md bg-white'
-                    }`}
+                  className={`px-6 py-3 rounded-lg border-2 transition-all ${
+                    fechaIda === f.fecha
+                      ? "border-purple-600 bg-purple-600 text-white shadow-lg transform scale-105"
+                      : "border-gray-200 hover:border-purple-300 hover:shadow-md bg-white"
+                  }`}
                 >
-                  <div className={`text-xs mb-1 ${fechaIda === f.fecha ? 'text-purple-100' : 'text-gray-500'}`}>
+                  <div
+                    className={`text-xs mb-1 ${
+                      fechaIda === f.fecha ? "text-purple-100" : "text-gray-500"
+                    }`}
+                  >
                     {f.dia}
                   </div>
                   <div className="text-2xl font-bold">{f.numero}</div>
-                  <div className={`text-xs mt-1 ${fechaIda === f.fecha ? 'text-purple-100' : 'text-gray-500'}`}>
+                  <div
+                    className={`text-xs mt-1 ${
+                      fechaIda === f.fecha ? "text-purple-100" : "text-gray-500"
+                    }`}
+                  >
                     {f.mes}
                   </div>
                 </button>
@@ -255,7 +306,6 @@ export default function BuscarVuelos() {
         )}
 
         {/* Lista de vuelos */}
-
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
@@ -264,7 +314,9 @@ export default function BuscarVuelos() {
         ) : vuelos.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">✈️</div>
-            <p className="text-gray-500 text-lg mb-2">No se encontraron vuelos para esta búsqueda</p>
+            <p className="text-gray-500 text-lg mb-2">
+              No se encontraron vuelos para esta búsqueda
+            </p>
             <p className="text-gray-400 text-sm">Intenta con otras fechas o destinos</p>
           </div>
         ) : (
@@ -289,9 +341,7 @@ export default function BuscarVuelos() {
 
                       {/* Duración */}
                       <div className="flex-1 text-center">
-                        <div className="text-sm text-gray-500 mb-1">
-                          Duración
-                        </div>
+                        <div className="text-sm text-gray-500 mb-1">Duración</div>
                         <div className="flex items-center justify-center gap-2">
                           <div className="h-px bg-gray-300 flex-1"></div>
                           <span className="text-sm font-medium text-gray-700">
@@ -325,51 +375,63 @@ export default function BuscarVuelos() {
                             className="h-8 w-auto object-contain"
                             onError={(e) => {
                               console.error(`Error cargando logo: ${vuelo.empresaLogo}`);
-                              e.target.style.display = 'none';
+                              e.currentTarget.style.display = "none";
                             }}
                           />
                         )}
-                        {/* <span className="font-medium text-gray-700">{vuelo.empresa}</span> */}
                       </div>
                       <span className="text-gray-500">• {vuelo.modelo}</span>
-                      <span className="text-gray-500">• {vuelo.asientosDisponibles} asientos disponibles</span>
+                      <span className="text-gray-500">
+                        • {vuelo.asientosDisponibles} asientos disponibles
+                      </span>
                     </div>
                   </div>
 
                   {/* Precio y selección */}
                   <div className="text-right ml-8">
-                    <div className="text-sm text-gray-500 mb-1">Por persona</div>
+                    <div className="text-sm text-gray-500 mb-1">Desde / por persona</div>
                     <div className="text-3xl font-bold text-purple-600 mb-3">
-                      ${Number(vuelo.precio).toLocaleString('es-CL')}
+                      {fmtCLP(vuelo.precioDesde ?? vuelo.precio)}
                     </div>
                     <button
-                      onClick={() => setVueloHover(vueloHover === vuelo.idViaje ? null : vuelo.idViaje)}
+                      onClick={() =>
+                        setVueloHover(vueloHover === vuelo.idViaje ? null : vuelo.idViaje)
+                      }
                       className="bg-purple-600 text-white px-8 py-3 rounded-lg hover:bg-purple-700 transition-all font-medium shadow-md hover:shadow-lg"
                     >
-                      {vueloHover === vuelo.idViaje ? 'Cerrar Tarifas' : 'Ver Tarifas'}
+                      {vueloHover === vuelo.idViaje ? "Cerrar Tarifas" : "Ver Tarifas"}
                     </button>
                     <div className="text-xs text-gray-500 mt-2">
-                      {vuelo.tarifasDisponibles} opciones de tarifa
+                      {(vuelo.tarifas?.length ?? 0)} opciones de tarifa
                     </div>
 
+                    {/* Panel de tarifas */}
                     {vueloHover === vuelo.idViaje && (
                       <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 p-6">
                         <div className="flex justify-between items-center mb-4 pb-3 border-b">
                           <div className="flex items-center gap-4">
                             <div className="bg-green-50 px-3 py-1 rounded-full">
-                              <span className="text-green-700 text-sm font-medium">Más económico</span>
+                              <span className="text-green-700 text-sm font-medium">
+                                Más económico
+                              </span>
                             </div>
                             <div className="bg-blue-50 px-3 py-1 rounded-full">
-                              <span className="text-blue-700 text-sm font-medium">Más rápido</span>
+                              <span className="text-blue-700 text-sm font-medium">
+                                Más rápido
+                              </span>
                             </div>
                           </div>
                           <div className="flex items-center gap-3 text-sm">
                             <span className="text-gray-600">
-                              <span className="font-bold text-gray-800">{vuelo.horaSalida}</span> {vuelo.origenCodigo}
+                              <span className="font-bold text-gray-800">{vuelo.horaSalida}</span>{" "}
+                              {vuelo.origenCodigo}
                             </span>
-                            <span className="text-gray-400">Duración {formatearDuracion(vuelo.duracion)}</span>
+                            <span className="text-gray-400">
+                              Duración {formatearDuracion(vuelo.duracion)}
+                            </span>
                             <span className="text-gray-600">
-                              <span className="font-bold text-gray-800">{vuelo.horaLlegada}</span> {vuelo.destinoCodigo}
+                              <span className="font-bold text-gray-800">{vuelo.horaLlegada}</span>{" "}
+                              {vuelo.destinoCodigo}
                             </span>
                           </div>
                           <button
@@ -390,198 +452,147 @@ export default function BuscarVuelos() {
                           </div>
                         </div>
 
-                        <div className="text-sm font-semibold text-gray-800 mb-3">4 Tarifas disponibles</div>
+                        <div className="text-sm font-semibold text-gray-800 mb-3">
+                          {(vuelo.tarifas?.length ?? 0)} Tarifas disponibles
+                        </div>
 
-                        <div className="grid grid-cols-4 gap-3">
-                          {/* Tarifa Light */}
-                          <div className="border rounded-lg p-4 hover:border-purple-400 transition-all">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="h-1 w-8 bg-green-500 rounded"></div>
-                              <h4 className="font-semibold text-sm">Light</h4>
-                            </div>
-                            <ul className="space-y-2 text-xs mb-4 min-h-[200px]">
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Bolso o mochila</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Maleta pequeña 12 kg</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Cambio con cargo + diferencia de precio</span>
-                              </li>
-                            </ul>
-                            <div className="border-t pt-3">
-                              <div className="text-xs text-gray-500 mb-1">CLP {Number(vuelo.precio).toLocaleString('es-CL')}</div>
-                              <div className="text-lg font-bold mb-2">
-                                CLP {Number(vuelo.precio).toLocaleString('es-CL')}
-                              </div>
-                              <div className="text-xs text-gray-500 mb-3">Por pasajero<br />Incluye tasas e impuestos</div>
-                              <button
-                                onClick={() => seleccionarVuelo(vuelo)}
-                                className="w-full border-2 border-purple-600 text-purple-600 py-2 rounded text-sm font-medium hover:bg-purple-50 transition-all"
-                              >
-                                Continuar con Light
-                              </button>
-                            </div>
-                          </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                          {vuelo?.tarifas?.map((t) => {
+                            const nombre = (t.nombreTarifa || t.nombre || "").toString();
+                            const premium = /premium/i.test(nombre);
+                            const full = /full$/i.test(nombre) && !premium;
+                            const standard = /standard/i.test(nombre);
+                            const light = /light/i.test(nombre);
 
-                          {/* Tarifa Standard */}
-                          <div className="border rounded-lg p-4 hover:border-purple-400 transition-all">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="h-1 w-8 bg-teal-500 rounded"></div>
-                              <h4 className="font-semibold text-sm">Standard</h4>
-                            </div>
-                            <ul className="space-y-2 text-xs mb-4 min-h-[200px]">
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Bolso o mochila</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Maleta pequeña 12 kg</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>1 equipaje de bodega 23 kg</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Cambio con cargo + diferencia de precio</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Postulación a UPG con tramos</span>
-                              </li>
-                            </ul>
-                            <div className="border-t pt-3">
-                              <div className="text-xs text-gray-500 mb-1">CLP {Number(vuelo.precio).toLocaleString('es-CL')}</div>
-                              <div className="text-xs text-gray-500">+ CLP 37.720</div>
-                              <div className="text-lg font-bold mb-2">
-                                CLP {(Number(vuelo.precio) + 37720).toLocaleString('es-CL')}
-                              </div>
-                              <div className="text-xs text-gray-500 mb-3">Por pasajero<br />Incluye tasas e impuestos</div>
-                              <button
-                                onClick={() => seleccionarVuelo(vuelo)}
-                                className="w-full bg-purple-600 text-white py-2 rounded text-sm font-medium hover:bg-purple-700 transition-all"
-                              >
-                                Elegir
-                              </button>
-                            </div>
-                          </div>
+                            const cardBase =
+                              "border rounded-lg p-4 hover:border-purple-400 transition-all";
+                            const cardClass = premium
+                              ? "border rounded-lg p-4 bg-gradient-to-br from-gray-800 to-gray-900 text-white hover:border-purple-400 transition-all"
+                              : cardBase;
 
-                          {/* Tarifa Full */}
-                          <div className="border rounded-lg p-4 hover:border-purple-400 transition-all">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="h-1 w-8 bg-pink-500 rounded"></div>
-                              <h4 className="font-semibold text-sm">Full</h4>
-                            </div>
-                            <ul className="space-y-2 text-xs mb-4 min-h-[200px]">
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Bolso o mochila</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Maleta pequeña 12 kg</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>1 equipaje de bodega 23 kg</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Cambio sin cargo + diferencia de precio</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Devolución antes de la salida del primer vuelo</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Selección de asiento Estándar</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-500 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Postulación a UPG con tramos</span>
-                              </li>
-                            </ul>
-                            <div className="border-t pt-3">
-                              <div className="text-xs text-gray-500 mb-1">CLP {Number(vuelo.precio).toLocaleString('es-CL')}</div>
-                              <div className="text-xs text-gray-500">+ CLP 81.098</div>
-                              <div className="text-lg font-bold mb-2">
-                                CLP {(Number(vuelo.precio) + 81098).toLocaleString('es-CL')}
-                              </div>
-                              <div className="text-xs text-gray-500 mb-3">Por pasajero<br />Incluye tasas e impuestos</div>
-                              <button
-                                onClick={() => seleccionarVuelo(vuelo)}
-                                className="w-full bg-purple-600 text-white py-2 rounded text-sm font-medium hover:bg-purple-700 transition-all"
-                              >
-                                Elegir
-                              </button>
-                            </div>
-                          </div>
+                            return (
+                              <div key={t.idTarifa} className={cardClass}>
+                                <div className="flex items-center gap-2 mb-3">
+                                  {!premium && (
+                                    <div className="h-1 w-8 rounded bg-green-500"></div>
+                                  )}
+                                  <h4
+                                    className={`font-semibold text-sm ${
+                                      premium ? "text-white" : ""
+                                    }`}
+                                  >
+                                    {nombre}
+                                  </h4>
+                                </div>
 
-                          {/* Tarifa Premium Business */}
-                          <div className="border rounded-lg p-4 bg-gradient-to-br from-gray-800 to-gray-900 text-white hover:border-purple-400 transition-all">
-                            <div className="mb-3">
-                              <h4 className="font-semibold text-sm">Premium Business Full</h4>
-                            </div>
-                            <ul className="space-y-2 text-xs mb-4 min-h-[200px]">
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Bolso o mochila</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Maleta pequeña 16 kg</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                                <span>2 equipajes de bodega 23 kg</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Cambio sin cargo + diferencia de precio</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Devolución antes de la salida del primer vuelo</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Asiento cama</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Mejor oferta gastronómica</span>
-                              </li>
-                              <li className="flex items-start gap-2">
-                                <span className="text-green-400 mt-0.5 flex-shrink-0">✓</span>
-                                <span>Embarque y desembarque prioritario</span>
-                              </li>
-                            </ul>
-                            <div className="border-t border-gray-700 pt-3">
-                              <div className="text-xs text-gray-400 mb-1">CLP {Number(vuelo.precio).toLocaleString('es-CL')}</div>
-                              <div className="text-xs text-gray-400">+ CLP 3.456.095</div>
-                              <div className="text-lg font-bold mb-2">
-                                CLP {(Number(vuelo.precio) + 3456095).toLocaleString('es-CL')}
+                                {/* bullets rápidos por tipo */}
+                                <ul
+                                  className={`space-y-2 text-xs mb-4 min-h-[200px] ${
+                                    premium ? "text-gray-200" : "text-gray-700"
+                                  }`}
+                                >
+                                  {light && (
+                                    <>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Bolso o mochila
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Maleta pequeña 12 kg
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Cambio con cargo + diferencia
+                                      </li>
+                                    </>
+                                  )}
+                                  {standard && (
+                                    <>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Bolso o mochila
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Maleta pequeña 12 kg
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>1 equipaje de bodega 23 kg
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Cambio con cargo + diferencia
+                                      </li>
+                                    </>
+                                  )}
+                                  {full && (
+                                    <>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Bolso o mochila
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Maleta pequeña 12 kg
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>1 equipaje de bodega 23 kg
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Cambio sin cargo + diferencia
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-500">✓</span>Selección de asiento Estándar
+                                      </li>
+                                    </>
+                                  )}
+                                  {premium && (
+                                    <>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-400">✓</span>2 equipajes de bodega 23 kg
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-400">✓</span>Asiento cama
+                                      </li>
+                                      <li className="flex gap-2">
+                                        <span className="text-green-400">✓</span>Embarque prioritario
+                                      </li>
+                                    </>
+                                  )}
+                                </ul>
+
+                                <div className={`${premium ? "border-gray-700" : ""} border-t pt-3`}>
+                                  <div className={`${premium ? "text-gray-300" : "text-gray-500"} text-xs mb-1`}>
+                                    {t.moneda} {Number(t.precio).toLocaleString("es-CL")}
+                                  </div>
+                                  <div className={`text-lg font-bold mb-2 ${premium ? "text-white" : ""}`}>
+                                    {t.moneda} {Number(t.precio).toLocaleString("es-CL")}
+                                  </div>
+                                  <div className={`${premium ? "text-gray-300" : "text-gray-500"} text-xs mb-3`}>
+                                    Por pasajero<br />Incluye tasas e impuestos
+                                  </div>
+
+                                  <button
+                                    onClick={() =>
+                                      seleccionarVuelo({
+                                        ...vuelo,
+                                        tarifaElegida: {
+                                          idTarifa: t.idTarifa,
+                                          nombre: nombre,
+                                          precio: Number(t.precio),
+                                          moneda: t.moneda,
+                                          cupos: t.cupos,
+                                        },
+                                      })
+                                    }
+                                    className={`w-full py-2 rounded text-sm font-medium transition-all ${
+                                      premium
+                                        ? "bg-white text-gray-900 hover:bg-gray-100"
+                                        : "bg-purple-600 text-white hover:bg-purple-700"
+                                    }`}
+                                  >
+                                    {light ? "Continuar con Light" : "Elegir"}
+                                  </button>
+                                </div>
                               </div>
-                              <div className="text-xs text-gray-400 mb-3">Por pasajero<br />Incluye tasas e impuestos</div>
-                              <button
-                                onClick={() => seleccionarVuelo(vuelo)}
-                                className="w-full bg-white text-gray-900 py-2 rounded text-sm font-medium hover:bg-gray-100 transition-all"
-                              >
-                                Elegir
-                              </button>
-                            </div>
-                          </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}
-
                   </div>
                 </div>
               </div>

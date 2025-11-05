@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useMemo } from "react";
+// Vuelos/context/VueloContext.jsx
+import { createContext, useContext, useState } from "react";
 
-const VueloCtx = createContext(undefined);
+const VueloCtx = createContext();
+export const useVuelo = () => useContext(VueloCtx);
 
 export function VueloProvider({ children }) {
   const [form, setForm] = useState({
@@ -8,20 +10,15 @@ export function VueloProvider({ children }) {
     destino: "",
     fechaIda: "",
     fechaVuelta: "",
-    pasajeros: "1",
-    cabina: "Económica",
-    vueloIda: null,
-    vueloVuelta: null,
+    clase: "",
+    pasajeros: 1,             // <-- por si necesitas multiplicar precio
+    tarifaSeleccionada: null, // "Light" | "Standard" | "Full" | etc
+    precioTarifa: 0,          // número en CLP
   });
 
-  const value = useMemo(() => ({ form, setForm }), [form]);
-  return <VueloCtx.Provider value={value}>{children}</VueloCtx.Provider>;
-}
-
-export function useVuelo() {
-  const ctx = useContext(VueloCtx);
-  if (ctx === undefined) {
-    throw new Error("useVuelo debe usarse dentro de VueloProvider");
-  }
-  return ctx;
+  return (
+    <VueloCtx.Provider value={{ form, setForm }}>
+      {children}
+    </VueloCtx.Provider>
+  );
 }

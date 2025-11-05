@@ -23,17 +23,26 @@ export default function Home() {
       .then((res) => res.json())
       .then((data) => {
         console.log("📦 Datos recibidos:", data);
+<<<<<<< HEAD
 
         if (Array.isArray(data)) {
           setDestinos(data);
         } else if (Array.isArray(data.items)) {
           // ✅ tu caso
+=======
+        if (Array.isArray(data)) {
+          setDestinos(data);
+        } else if (Array.isArray(data.items)) {
+>>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
           setDestinos(data.items);
         } else {
           console.warn("⚠️ Formato inesperado en respuesta:", data);
           setDestinos([]);
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
         setLoading(false);
       })
       .catch((err) => {
@@ -43,21 +52,37 @@ export default function Home() {
       });
   }, []);
 
-
   const handleSearch = (e) => {
     e.preventDefault();
 
-    setForm((prev) => ({
-      ...prev,
-      origen: desde || "",
+    const payload = {
+      origen: desde || "SCL",
       destino: hacia || "",
       fechaIda: ida || "",
+<<<<<<< HEAD
       fechaVuelta: tripType === "round" ? vuelta || "" : "",
+=======
+      fechaVuelta: tripType === "round" ? (vuelta || "") : "",
+      clase: clase || "eco",
+      tipoViaje: tripType === "round" ? "ida-vuelta" : "solo-ida",
+      pasajeros: 1,
+    };
+
+    // Guardar también en contexto si lo usas en otros pasos
+    setForm((prev) => ({
+      ...prev,
+      ...payload,
+>>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
       vueloIda: null,
       vueloVuelta: null,
     }));
 
+<<<<<<< HEAD
     navigate("/vuelos/buscar");
+=======
+    // 🔁 redirige a la página de búsqueda con los datos
+    navigate("/vuelos/buscar", { state: { search: payload } });
+>>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
   };
 
   return (
@@ -147,7 +172,11 @@ export default function Home() {
                 required
               />
 
+<<<<<<< HEAD
               {/* Vuelta (solo si es ida y vuelta) */}
+=======
+              {/* Vuelta (solo round trip) */}
+>>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
               {tripType === "round" && (
                 <input
                   type="date"
@@ -158,6 +187,21 @@ export default function Home() {
                 />
               )}
 
+<<<<<<< HEAD
+=======
+              {/* Clase */}
+              <select
+                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
+                value={clase}
+                onChange={(e) => setClase(e.target.value)}
+              >
+                <option value="">Clase</option>
+                <option value="eco">Económica</option>
+                <option value="premium">Premium</option>
+                <option value="ejec">Ejecutiva</option>
+              </select>
+
+>>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
               {/* Botón */}
               <button
                 type="submit"
@@ -214,6 +258,7 @@ export default function Home() {
         </h2>
 
         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
+<<<<<<< HEAD
           {[
             {
               id: 1,
@@ -260,11 +305,19 @@ export default function Home() {
                 {"★".repeat(r.rating)}
                 {"☆".repeat(5 - r.rating)}
               </div>
+=======
+          {[ /* ...tus reseñas... */ ].map((r) => (
+            <div key={r.id} className="bg-gray-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all">
+              {/* ... */}
+>>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
             </div>
           ))}
         </div>
       </section>
+<<<<<<< HEAD
 
+=======
+>>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
     </div>
   );
 }
