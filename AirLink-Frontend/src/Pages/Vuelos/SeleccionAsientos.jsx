@@ -118,23 +118,11 @@ export default function SeleccionAsientos() {
     }
   };
 
-  /* =======================
-     FLUJO Y PERSISTENCIA
-     ======================= */
   const continuarSiguienteVuelo = () => {
     if (asientosSeleccionadosIda.length !== pasajeros) {
       alert(`Debes seleccionar ${pasajeros} asiento(s)`);
       return;
     }
-    // Guarda progreso parcial (por si vuelve atrás o refresca)
-    const parcial = {
-      ...datosViaje,
-      asientosIda: asientosSeleccionadosIda,
-      __ts: Date.now(),
-    };
-    lsSet("airlink_datos_viaje", parcial);
-    setDatosViaje(parcial);
-
     if (datosViaje?.vueloVuelta) {
       setVueloActual("vuelta");
     } else {
@@ -151,48 +139,35 @@ export default function SeleccionAsientos() {
       return;
     }
 
-    // 1) Payload completo con asientos
     const payload = {
       ...datosViaje,
       asientosIda: asientosSeleccionadosIda,
       asientosVuelta: asientosSeleccionadosVuelta,
-      __ts: Date.now(),
     };
 
-    // 2) Persistir compat (por si F5 en Pago)
+    // ===== PASO CLAVE PARA EL GUARD =====
+    // Debe ser exactamente "true" (string)
+    localStorage.setItem("checkout_ready", "true");
+
+    // Actualiza vueloSeleccionado con asientos
+    try {
+      const vs = JSON.parse(localStorage.getItem("vueloSeleccionado") || "{}");
+      localStorage.setItem(
+        "vueloSeleccionado",
+        JSON.stringify({
+          ...vs,
+          asientosIda: asientosSeleccionadosIda,
+          asientosVuelta: asientosSeleccionadosVuelta,
+        })
+      );
+    } catch (e) {
+      console.warn("No se pudo actualizar vueloSeleccionado:", e);
+    }
+
+    // Guarda snapshot por si refrescan Pago
     lsSet("airlink_checkout_asientos", payload);
-    lsSet("airlink_datos_viaje", payload);
 
-    // 3) **Actualizar la clave que leen los guards**
-    const vsPrev = lsGet("vueloSeleccionado") || {};
-    const vsNext = {
-      ...vsPrev,
-      // aseguramos campos críticos que usa el guard
-      vueloIda: payload.vueloIda ?? vsPrev.vueloIda,
-      tarifaIda: payload.tarifaIda ?? vsPrev.tarifaIda,
-      vueloVuelta: payload.vueloVuelta ?? vsPrev.vueloVuelta,
-      tarifaVuelta: payload.tarifaVuelta ?? vsPrev.tarifaVuelta,
-      // agregamos asientos
-      asientosIda: payload.asientosIda || [],
-      asientosVuelta: payload.asientosVuelta || [],
-      // meta
-      origen: payload.origen ?? vsPrev.origen,
-      destino: payload.destino ?? vsPrev.destino,
-      fechaIda: payload.fechaIda ?? vsPrev.fechaIda,
-      fechaVuelta: payload.fechaVuelta ?? vsPrev.fechaVuelta,
-      clase: payload.clase ?? vsPrev.clase,
-      pasajeros: payload.pasajeros ?? vsPrev.pasajeros,
-      tipoViaje: payload.tipoViaje ?? vsPrev.tipoViaje,
-      __ts: Date.now(),
-    };
-    lsSet("vueloSeleccionado", vsNext);
-
-    // 4) **Marcar checkout listo** (lo que RequireCheckoutReady espera)
-    const checkout = { ready: true, step: "seats_done", __ts: Date.now() };
-    lsSet("checkout", checkout);
-    lsSet("checkout_ready", checkout); // compat
-
-    // 5) Navegar recién después de persistir todo
+    // Navega a Pago
     navigate("/pago", { state: payload, replace: true });
   };
 
