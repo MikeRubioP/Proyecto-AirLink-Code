@@ -1,3 +1,4 @@
+// src/Pages/Pago/Pago.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import { CreditCard, Building2, Wallet, AlertCircle, Clock, MapPin } from "lucide-react";
 import axios from "axios";
@@ -42,12 +43,16 @@ export default function Pago() {
     telefono: "",
   });
 
-  // Fuente de verdad para vuelo + tarifa (con fallbacks)
+  // --------- Lecturas base del flujo ----------
+  const searchState = useMemo(() => safeParse("searchState") || {}, []);
+  const isRT = searchState?.tipoViaje === "RT";
+
+  // Fuente de verdad para vuelo + tarifa (IDA) con fallbacks
   const vueloSeleccionado = useMemo(
     () =>
       pickFirst(
-        safeParse("airlink_checkout_asientos")?.vueloIda, // si vienes desde Selección de Asientos y guardaste el payload
-        safeParse("vueloSeleccionado")?.vueloIda,          // formato usado en flujo de ida/vuelta
+        safeParse("airlink_checkout_asientos")?.vueloIda,
+        safeParse("vueloSeleccionado")?.vueloIda,
         safeParse("airlink_viaje"),
         safeParse("selectedFlight"),
         safeParse("flight")
@@ -68,7 +73,28 @@ export default function Pago() {
     []
   );
 
-  // Normalización de campos del vuelo/tarifa para la UI y para el backend
+  // --------- Lecturas para VUELTA (solo RT) ----------
+  const vueloSeleccionadoVuelta = useMemo(
+    () =>
+      pickFirst(
+        safeParse("airlink_checkout_asientos")?.vueloVuelta,
+        safeParse("vueloSeleccionado")?.vueloVuelta
+      ),
+    []
+  );
+
+  const tarifaSeleccionadaVuelta = useMemo(
+    () =>
+      pickFirst(
+        safeParse("airlink_checkout_asientos")?.tarifaVuelta,
+        safeParse("vueloSeleccionado")?.tarifaVuelta,
+        safeParse("airlink_tarifa_vuelta"),
+        safeParse("selectedFareReturn")
+      ),
+    []
+  );
+
+  // --------- Normalización IDA ----------
   const vueloNorm = useMemo(() => {
     const v = vueloSeleccionado;
     if (!v) return null;
@@ -95,7 +121,37 @@ export default function Pago() {
     };
   }, [tarifaSeleccionada]);
 
-  const totalVuelo = Number(tarifaNorm?.precio || 0);
+  // --------- Normalización VUELTA ----------
+  const vueloNormVuelta = useMemo(() => {
+    const v = vueloSeleccionadoVuelta;
+    if (!v) return null;
+    return {
+      idViaje: v.idViaje ?? v.id ?? null,
+      empresa: v.empresa ?? v.airline ?? "—",
+      origen: v.origenCodigo ?? v.origen ?? v.from ?? "—",
+      destino: v.destinoCodigo ?? v.destino ?? v.to ?? "—",
+      horaSalida: v.horaSalida || "",
+      horaLlegada: v.horaLlegada || "",
+      fechaSalida: v.fechaSalida || v.salida?.split(" ")[0] || "",
+      duracion: v.duracion || "",
+    };
+  }, [vueloSeleccionadoVuelta]);
+
+  const tarifaNormVuelta = useMemo(() => {
+    const t = tarifaSeleccionadaVuelta;
+    if (!t) return null;
+    return {
+      nombreTarifa: t.nombreTarifa ?? t.nombre ?? "Tarifa",
+      precio: Number(t.precio || 0),
+      moneda: t.moneda || "CLP",
+      cupos: t.cupos ?? null,
+    };
+  }, [tarifaSeleccionadaVuelta]);
+
+  // Total del/los vuelo(s)
+  const totalVuelo =
+    Number(tarifaNorm?.precio || 0) +
+    (isRT ? Number(tarifaNormVuelta?.precio || 0) : 0);
 
   // Paso 2: buses
   const [selectedBuses, setSelectedBuses] = useState([]);
@@ -193,7 +249,11 @@ export default function Pago() {
       return false;
     }
     if (!vueloNorm || !tarifaNorm) {
-      setError("No se encontró la selección de vuelo. Vuelve a Detalle y elige una tarifa.");
+      setError("No se encontró la selección de vuelo de ida. Vuelve a Detalle y elige una tarifa.");
+      return false;
+    }
+    if (isRT && (!vueloNormVuelta || !tarifaNormVuelta)) {
+      setError("Seleccionaste ida y vuelta, pero falta la información de la vuelta.");
       return false;
     }
     return true;
@@ -214,13 +274,13 @@ export default function Pago() {
   };
 
   /* =========================
-     Resumen (vuelo + buses)
+     Resumen (ida + vuelta + buses)
   ========================= */
   const total = useMemo(() => totalVuelo + (skipBus ? 0 : totalBuses), [totalVuelo, totalBuses, skipBus]);
 
   const resumen = useMemo(() => {
     return {
-      vuelo: vueloNorm
+      vueloIda: vueloNorm
         ? {
             idViaje: vueloNorm.idViaje,
             empresa: vueloNorm.empresa,
@@ -229,14 +289,39 @@ export default function Pago() {
             horaSalida: vueloNorm.horaSalida,
             horaLlegada: vueloNorm.horaLlegada,
             tarifaNombre: tarifaNorm?.nombreTarifa || "Tarifa",
-            precio: totalVuelo,
+            precio: Number(tarifaNorm?.precio || 0),
           }
         : null,
+      vueloVuelta:
+        isRT && vueloNormVuelta
+          ? {
+              idViaje: vueloNormVuelta.idViaje,
+              empresa: vueloNormVuelta.empresa,
+              origen: vueloNormVuelta.origen,
+              destino: vueloNormVuelta.destino,
+              horaSalida: vueloNormVuelta.horaSalida,
+              horaLlegada: vueloNormVuelta.horaLlegada,
+              tarifaNombre: tarifaNormVuelta?.nombreTarifa || "Tarifa",
+              precio: Number(tarifaNormVuelta?.precio || 0),
+            }
+          : null,
       buses: skipBus ? [] : selectedBuses,
       total: totalVuelo + (skipBus ? 0 : totalBuses),
       pasajero: passengerData,
+      isRT,
     };
-  }, [vueloNorm, tarifaNorm, totalVuelo, selectedBuses, skipBus, total, passengerData]);
+  }, [
+    vueloNorm,
+    tarifaNorm,
+    vueloNormVuelta,
+    tarifaNormVuelta,
+    totalVuelo,
+    selectedBuses,
+    skipBus,
+    totalBuses,
+    passengerData,
+    isRT,
+  ]);
 
   /* =========================
      Guard visual si no hay vuelo
@@ -262,17 +347,23 @@ export default function Pago() {
   ========================= */
   const handlePayment = async () => {
     try {
-      if (!resumen.vuelo) {
-        setError("No se encontró la información del vuelo. Vuelve a la selección de tarifa.");
+      if (!resumen.vueloIda) {
+        setError("No se encontró la información del vuelo de ida. Vuelve a la selección de tarifa.");
         return;
       }
+      if (resumen.isRT && !resumen.vueloVuelta) {
+        setError("Falta la información del vuelo de vuelta.");
+        return;
+      }
+
       setLoading(true);
       setError("");
 
       // 1) Crear reserva
       const reservaResp = await axios.post("http://localhost:5174/pagos/crear-reserva", {
         pasajero: resumen.pasajero,
-        vuelo: resumen.vuelo,
+        vueloIda: resumen.vueloIda,
+        vueloVuelta: resumen.vueloVuelta, // null si OW
         buses: resumen.buses,
         total: resumen.total,
         metodoPago: selectedPaymentMethod,
@@ -283,10 +374,12 @@ export default function Pago() {
       // 2) Gateway de pago según método
       if (selectedPaymentMethod === "stripe") {
         const r = await axios.post("http://localhost:5174/pagos/stripe/create-session", {
-          vuelo: resumen.vuelo,
-          buses: resumen.buses,
           reservaId,
           pasajero: resumen.pasajero,
+          vueloIda: resumen.vueloIda,
+          vueloVuelta: resumen.vueloVuelta,
+          buses: resumen.buses,
+          total: resumen.total,
         });
         if (r.data?.url) {
           window.location.href = r.data.url;
@@ -297,10 +390,12 @@ export default function Pago() {
 
       if (selectedPaymentMethod === "mercadopago") {
         const r = await axios.post("http://localhost:5174/pagos/mercadopago/create-preference", {
-          vuelo: resumen.vuelo,
-          buses: resumen.buses,
           reservaId,
           pasajero: resumen.pasajero,
+          vueloIda: resumen.vueloIda,
+          vueloVuelta: resumen.vueloVuelta,
+          buses: resumen.buses,
+          total: resumen.total,
         });
         if (r.data?.init_point) {
           window.location.href = r.data.init_point;
@@ -311,10 +406,12 @@ export default function Pago() {
 
       if (selectedPaymentMethod === "paypal") {
         const r = await axios.post("http://localhost:5174/pagos/paypal/create-order", {
-          vuelo: resumen.vuelo,
-          buses: resumen.buses,
           reservaId,
           pasajero: resumen.pasajero,
+          vueloIda: resumen.vueloIda,
+          vueloVuelta: resumen.vueloVuelta,
+          buses: resumen.buses,
+          total: resumen.total,
         });
         if (r.data?.approveUrl) {
           window.location.href = r.data.approveUrl;
@@ -607,23 +704,42 @@ export default function Pago() {
 
           {currentStep === 3 && (
             <div className="px-4 pb-6 space-y-4">
-              {/* Card Vuelo */}
-              {resumen.vuelo && (
-                <div className="border-2 border-purple-600 rounded-2xl p-4 flex items-start justify-between">
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold text-gray-900">
-                      {resumen.vuelo.empresa} · {resumen.vuelo.origen} → {resumen.vuelo.destino}
+              {/* Card Vuelo (ida y, si corresponde, vuelta) */}
+              <div className="border-2 border-purple-600 rounded-2xl p-4 flex flex-col gap-3">
+                {resumen.vueloIda && (
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold text-gray-900">
+                        {resumen.vueloIda.empresa} · {resumen.vueloIda.origen} → {resumen.vueloIda.destino}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {resumen.vueloIda.horaSalida} — {resumen.vueloIda.horaLlegada} · Tarifa: {resumen.vueloIda.tarifaNombre}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-600">
-                      {resumen.vuelo.horaSalida} — {resumen.vuelo.horaLlegada} · Tarifa: {resumen.vuelo.tarifaNombre}
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500 mb-1">Vuelo (ida)</div>
+                      <div className="text-lg font-bold text-gray-900">{CLP(resumen.vueloIda.precio)}</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-500 mb-1">Vuelo</div>
-                    <div className="text-lg font-bold text-gray-900">{CLP(resumen.vuelo.precio)}</div>
+                )}
+
+                {resumen.isRT && resumen.vueloVuelta && (
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold text-gray-900">
+                        {resumen.vueloVuelta.empresa} · {resumen.vueloVuelta.origen} → {resumen.vueloVuelta.destino}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        {resumen.vueloVuelta.horaSalida} — {resumen.vueloVuelta.horaLlegada} · Tarifa: {resumen.vueloVuelta.tarifaNombre}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500 mb-1">Vuelo (vuelta)</div>
+                      <div className="text-lg font-bold text-gray-900">{CLP(resumen.vueloVuelta.precio)}</div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Métodos de pago */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -661,12 +777,21 @@ export default function Pago() {
               <div className="bg-gray-50 rounded-xl p-4">
                 <h3 className="font-bold text-gray-900 mb-3">Resumen de tu reserva</h3>
                 <div className="space-y-2 text-sm">
-                  {resumen.vuelo && (
+                  {resumen.vueloIda && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">
-                        Vuelo – {resumen.vuelo.origen} → {resumen.vuelo.destino} · {resumen.vuelo.tarifaNombre}
+                        Vuelo (ida) – {resumen.vueloIda.origen} → {resumen.vueloIda.destino} · {resumen.vueloIda.tarifaNombre}
                       </span>
-                      <span className="font-semibold">{CLP(resumen.vuelo.precio)}</span>
+                      <span className="font-semibold">{CLP(resumen.vueloIda.precio)}</span>
+                    </div>
+                  )}
+
+                  {resumen.isRT && resumen.vueloVuelta && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">
+                        Vuelo (vuelta) – {resumen.vueloVuelta.origen} → {resumen.vueloVuelta.destino} · {resumen.vueloVuelta.tarifaNombre}
+                      </span>
+                      <span className="font-semibold">{CLP(resumen.vueloVuelta.precio)}</span>
                     </div>
                   )}
 
@@ -689,7 +814,7 @@ export default function Pago() {
 
               <button
                 onClick={handlePayment}
-                disabled={loading || !resumen.vuelo}
+                disabled={loading || !resumen.vueloIda}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {loading ? (
