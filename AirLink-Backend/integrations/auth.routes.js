@@ -1,29 +1,27 @@
 // auth.routes.js
 import express from "express";
-import bcrypt from "bcrypt";                // ok usar bcrypt o bcryptjs
+import bcrypt from "bcrypt"; // ok usar bcrypt o bcryptjs
 import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 
 export const router = express.Router();
 
-// ======== Config ========
 const JWT_SECRET = process.env.JWT_SECRET || "dev_only_change_me";
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
-// Transporte de correo por variables de entorno (NO hardcodear)
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER,       // ej: airlink.noreply@gmail.com
-    pass: process.env.EMAIL_PASS,       // app password de Gmail
+    user: "airlink.noreply@gmail.com",
+    pass: "hpku sgmv cktw yrea",
   },
 });
 
-// Códigos de verificación en memoria (para demo). En producción → persistir (DB/Redis)
 const verificationCodes = new Map(); // key: email, value: { code, expiresAt, nombreUsuario, contrasenaHash }
 
 // Helpers
-const generateCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+const generateCode = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
 const normalizeEmail = (s = "") => s.trim().toLowerCase();
 
 const signToken = (payload) =>
@@ -56,20 +54,34 @@ router.post("/register", async (req, res) => {
   // Validación mínima (mejor usar zod/express-validator si lo tienes instalado)
   nombreUsuario = nombreUsuario.trim();
   email = normalizeEmail(email);
-  if (!nombreUsuario || !email || typeof contrasena !== "string" || contrasena.length < 6) {
+  if (
+    !nombreUsuario ||
+    !email ||
+    typeof contrasena !== "string" ||
+    contrasena.length < 6
+  ) {
     return res.status(400).json({ message: "Datos inválidos" });
   }
 
   try {
     // ¿correo ya existe?
-    const [rows] = await db.execute("SELECT idUsuario FROM usuario WHERE email = ? LIMIT 1", [email]);
-    if (rows.length) return res.status(409).json({ message: "El correo ya está registrado" });
+    const [rows] = await db.execute(
+      "SELECT idUsuario FROM usuario WHERE email = ? LIMIT 1",
+      [email]
+    );
+    if (rows.length)
+      return res.status(409).json({ message: "El correo ya está registrado" });
 
     const code = generateCode();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 min
     const contrasenaHash = await bcrypt.hash(contrasena, 12);
 
-    verificationCodes.set(email, { code, expiresAt, nombreUsuario, contrasena: contrasenaHash });
+    verificationCodes.set(email, {
+      code,
+      expiresAt,
+      nombreUsuario,
+      contrasena: contrasenaHash,
+    });
 
     // Email
     const mailOptions = {
@@ -111,12 +123,16 @@ router.post("/verify-code", async (req, res) => {
 
   try {
     const stored = verificationCodes.get(email);
-    if (!stored) return res.status(400).json({ message: "Código no encontrado o expirado" });
+    if (!stored)
+      return res
+        .status(400)
+        .json({ message: "Código no encontrado o expirado" });
     if (Date.now() > stored.expiresAt) {
       verificationCodes.delete(email);
       return res.status(400).json({ message: "El código ha expirado" });
     }
-    if (stored.code !== code) return res.status(400).json({ message: "Código incorrecto" });
+    if (stored.code !== code)
+      return res.status(400).json({ message: "Código incorrecto" });
 
     const [result] = await db.execute(
       "INSERT INTO usuario (nombreUsuario, email, contrasena, idRol, verificado, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
@@ -145,7 +161,10 @@ router.post("/resend-code", async (req, res) => {
 
   try {
     const stored = verificationCodes.get(email);
-    if (!stored) return res.status(400).json({ message: "No hay registro pendiente para este email" });
+    if (!stored)
+      return res
+        .status(400)
+        .json({ message: "No hay registro pendiente para este email" });
 
     const code = generateCode();
     const expiresAt = Date.now() + 10 * 60 * 1000;
@@ -171,11 +190,16 @@ router.post("/login", async (req, res) => {
   const email = normalizeEmail(req.body.email);
   const contrasena = String(req.body.contrasena || "");
 
-  if (!email || !contrasena) return res.status(400).json({ message: "Datos inválidos" });
+  if (!email || !contrasena)
+    return res.status(400).json({ message: "Datos inválidos" });
 
   try {
-    const [rows] = await db.execute("SELECT * FROM usuario WHERE email = ? LIMIT 1", [email]);
-    if (!rows.length) return res.status(401).json({ message: "Credenciales inválidas" });
+    const [rows] = await db.execute(
+      "SELECT * FROM usuario WHERE email = ? LIMIT 1",
+      [email]
+    );
+    if (!rows.length)
+      return res.status(401).json({ message: "Credenciales inválidas" });
 
     const user = rows[0];
     const ok = await bcrypt.compare(contrasena, user.contrasena);
@@ -196,31 +220,44 @@ router.post("/google", async (req, res) => {
   const { googleId = "", nombreUsuario = "" } = req.body;
   const email = normalizeEmail(req.body.email);
 
-  if (!googleId || !email) return res.status(400).json({ message: "Datos inválidos" });
+  if (!googleId || !email)
+    return res.status(400).json({ message: "Datos inválidos" });
 
   try {
     // Buscar por email primero y actualizar googleId si no estaba
-    let [rows] = await db.execute("SELECT * FROM usuario WHERE email = ? LIMIT 1", [email]);
+    let [rows] = await db.execute(
+      "SELECT * FROM usuario WHERE email = ? LIMIT 1",
+      [email]
+    );
 
     if (!rows.length) {
       await db.execute(
         "INSERT INTO usuario (nombreUsuario, email, googleId, idRol, verificado, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
         [nombreUsuario || email.split("@")[0], email, googleId, 1, true]
       );
-      [rows] = await db.execute("SELECT * FROM usuario WHERE email = ? LIMIT 1", [email]);
+      [rows] = await db.execute(
+        "SELECT * FROM usuario WHERE email = ? LIMIT 1",
+        [email]
+      );
     } else if (!rows[0].googleId) {
-      await db.execute("UPDATE usuario SET googleId = ?, verificado = ? WHERE idUsuario = ?", [
-        googleId,
-        true,
-        rows[0].idUsuario,
-      ]);
-      [rows] = await db.execute("SELECT * FROM usuario WHERE email = ? LIMIT 1", [email]);
+      await db.execute(
+        "UPDATE usuario SET googleId = ?, verificado = ? WHERE idUsuario = ?",
+        [googleId, true, rows[0].idUsuario]
+      );
+      [rows] = await db.execute(
+        "SELECT * FROM usuario WHERE email = ? LIMIT 1",
+        [email]
+      );
     }
 
     const user = rows[0];
     const token = signToken({ idUsuario: user.idUsuario, email: user.email });
     const { contrasena: _omit, ...usuarioSinPassword } = user;
-    res.json({ message: "Login con Google exitoso", token, usuario: usuarioSinPassword });
+    res.json({
+      message: "Login con Google exitoso",
+      token,
+      usuario: usuarioSinPassword,
+    });
   } catch (error) {
     console.error("Error en /google:", error);
     res.status(500).json({ error: "Error interno" });
@@ -235,7 +272,8 @@ router.get("/me", verifyToken, async (req, res) => {
       "SELECT idUsuario, nombreUsuario, email, idRol, googleId, verificado FROM usuario WHERE idUsuario = ? LIMIT 1",
       [req.userId]
     );
-    if (!rows.length) return res.status(404).json({ message: "Usuario no encontrado" });
+    if (!rows.length)
+      return res.status(404).json({ message: "Usuario no encontrado" });
     res.json({ usuario: rows[0] });
   } catch (error) {
     console.error("Error en /me:", error);

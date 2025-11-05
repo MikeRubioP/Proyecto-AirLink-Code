@@ -1,6 +1,6 @@
 // index.js
 import dotenv from "dotenv";
-dotenv.config(); // Cargar variables de entorno lo antes posible
+dotenv.config();
 
 import express from "express";
 import cors from "cors";

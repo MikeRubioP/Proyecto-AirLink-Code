@@ -330,6 +330,65 @@ export default function Home() {
           </Link>
         </div>
       </section>
+
+      {/* RESEÑAS */}
+      <section className="bg-white py-16">
+        <h2 className="text-center text-3xl font-bold mb-10 text-gray-800">
+          Reseñas de nuestros clientes
+        </h2>
+
+        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
+          {[
+            {
+              id: 1,
+              nombre: "Julio Tapia",
+              cargo: "Traveler",
+              texto:
+                "El servicio fue excelente, el vuelo cómodo y puntual. ¡Altamente recomendado!",
+              rating: 5,
+            },
+            {
+              id: 2,
+              nombre: "Alan Gajardo",
+              cargo: "Traveler",
+              texto:
+                "Muy buena experiencia con AirLink, fácil de reservar y excelente atención.",
+              rating: 4,
+            },
+            {
+              id: 3,
+              nombre: "Daniel Sepúlveda",
+              cargo: "Traveler",
+              texto:
+                "Todo fue rápido y sin complicaciones. Definitivamente volveré a viajar con ellos.",
+              rating: 5,
+            },
+          ].map((r) => (
+            <div
+              key={r.id}
+              className="bg-gray-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <img
+                  src={BannersHome}
+                  alt={r.nombre}
+                  className="w-12 h-12 rounded-full object-cover border border-gray-300"
+                />
+                <div>
+                  <h4 className="font-semibold">{r.nombre}</h4>
+                  <p className="text-sm text-gray-500">{r.cargo}</p>
+                </div>
+              </div>
+              <p className="text-gray-600 text-sm mb-2">{r.texto}</p>
+              <div className="text-yellow-400 text-lg">
+                {"★".repeat(r.rating)}
+                {"☆".repeat(5 - r.rating)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
     </div>
   );
 }
