@@ -293,7 +293,7 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                                         value={formData.nombreUsuario}
                                         onChange={handleInputChange}
                                         onBlur={handleBlur}
-                                        placeholder="tu_nombre"
+                                        placeholder="Nombre"
                                         errors={fieldErrors.nombreUsuario || []}
                                         touched={touchedFields.nombreUsuario}
                                         maxLength={30}

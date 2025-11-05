@@ -5,14 +5,24 @@ import { GoogleLogin } from "@react-oauth/google";
 import { jwtDecode } from "jwt-decode";
 import axios from "axios";
 import { useAuth } from '../context/AuthContext';
+import ValidatedInput from './ValidatedInput'; // Ajusta la ruta según tu estructura
+import { validateEmail, validatePassword } from '../utils/validators';
 
 const LoginModal = ({ isOpen, onClose, onSwitchToRegister }) => {
     const modalRef = useRef(null);
-    const { login } = useAuth(); // ← Solo necesitas login
+    const { login } = useAuth();
     const [showEmailForm, setShowEmailForm] = useState(false);
     const [formData, setFormData] = useState({
         email: '',
         contrasena: ''
+    });
+    const [touched, setTouched] = useState({
+        email: false,
+        contrasena: false
+    });
+    const [validationErrors, setValidationErrors] = useState({
+        email: [],
+        contrasena: []
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -45,6 +55,8 @@ const LoginModal = ({ isOpen, onClose, onSwitchToRegister }) => {
         if (!isOpen) {
             setShowEmailForm(false);
             setFormData({ email: '', contrasena: '' });
+            setTouched({ email: false, contrasena: false });
+            setValidationErrors({ email: [], contrasena: [] });
             setError('');
         }
     }, [isOpen]);
@@ -52,19 +64,67 @@ const LoginModal = ({ isOpen, onClose, onSwitchToRegister }) => {
     if (!isOpen) return null;
 
     const handleInputChange = (e) => {
+        const { name, value } = e.target;
         setFormData({
             ...formData,
-            [e.target.name]: e.target.value
+            [name]: value
         });
         setError('');
+
+        // Validar en tiempo real
+        if (touched[name]) {
+            validateField(name, value);
+        }
+    };
+
+    const validateField = (fieldName, value) => {
+        let validation;
+
+        if (fieldName === 'email') {
+            validation = validateEmail(value);
+        } else if (fieldName === 'contrasena') {
+            validation = validatePassword(value);
+        }
+
+        setValidationErrors(prev => ({
+            ...prev,
+            [fieldName]: validation.errors
+        }));
+
+        return validation.isValid;
+    };
+
+    const handleBlur = (e) => {
+        const { name, value } = e.target;
+        setTouched(prev => ({
+            ...prev,
+            [name]: true
+        }));
+        validateField(name, value);
     };
 
     const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
 
-        if (!formData.email || !formData.contrasena) {
-            setError('Todos los campos son obligatorios');
+        // Marcar todos los campos como touched
+        setTouched({
+            email: true,
+            contrasena: true
+        });
+
+        // Validar ambos campos
+        const emailValidation = validateEmail(formData.email);
+        const passwordValidation = validatePassword(formData.contrasena);
+
+        setValidationErrors({
+            email: emailValidation.errors,
+            contrasena: passwordValidation.errors
+        });
+
+        // Si hay errores de validación, no enviar el formulario
+        if (!emailValidation.isValid || !passwordValidation.isValid) {
+            setError('Por favor corrige los errores antes de continuar');
             return;
         }
 
@@ -72,15 +132,13 @@ const LoginModal = ({ isOpen, onClose, onSwitchToRegister }) => {
 
         try {
             const res = await axios.post("http://localhost:5174/auth/login", {
-                email: formData.email,
+                email: emailValidation.sanitized, // Usar el email sanitizado
                 contrasena: formData.contrasena,
             });
 
-            // Usar el login del context
             login(res.data.usuario, res.data.token);
             console.log("Login correcto:", res.data.usuario);
             onClose();
-            // NO uses window.location.reload() - el context se encargará
         } catch (err) {
             setError(err.response?.data?.message || "Error en login");
         } finally {
@@ -99,10 +157,8 @@ const LoginModal = ({ isOpen, onClose, onSwitchToRegister }) => {
                 nombreUsuario: decoded.name,
             });
 
-            // Usar el login del context
             login(res.data.usuario, res.data.token);
             onClose();
-            // NO uses window.location.reload()
         } catch (err) {
             setError(err.response?.data?.message || "Error en login con Google");
         }
@@ -153,33 +209,35 @@ const LoginModal = ({ isOpen, onClose, onSwitchToRegister }) => {
                     ) : (
                         <>
                             <form onSubmit={handleLogin} className="w-full space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Email
-                                    </label>
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        value={formData.email}
-                                        onChange={handleInputChange}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                                        placeholder="tu@email.com"
-                                    />
-                                </div>
+                                <ValidatedInput
+                                    label="Email"
+                                    type="email"
+                                    name="email"
+                                    value={formData.email}
+                                    onChange={handleInputChange}
+                                    onBlur={handleBlur}
+                                    placeholder="tu@email.com"
+                                    errors={validationErrors.email}
+                                    touched={touched.email}
+                                    required
+                                    maxLength={100}
+                                    autoComplete="email"
+                                />
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Contraseña
-                                    </label>
-                                    <input
-                                        type="password"
-                                        name="contrasena"
-                                        value={formData.contrasena}
-                                        onChange={handleInputChange}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                                        placeholder="Tu contraseña"
-                                    />
-                                </div>
+                                <ValidatedInput
+                                    label="Contraseña"
+                                    type="password"
+                                    name="contrasena"
+                                    value={formData.contrasena}
+                                    onChange={handleInputChange}
+                                    onBlur={handleBlur}
+                                    placeholder="Tu contraseña"
+                                    errors={validationErrors.contrasena}
+                                    touched={touched.contrasena}
+                                    required
+                                    maxLength={128}
+                                    autoComplete="current-password"
+                                />
 
                                 {error && (
                                     <div className="text-red-600 text-sm text-center bg-red-50 py-2 px-3 rounded">

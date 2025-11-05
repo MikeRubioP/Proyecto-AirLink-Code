@@ -19,7 +19,7 @@ import { router as uploadRoutes } from "./integrations/upload.routes.js";
 import { router as pagosRoutes } from "./integrations/pagos.routes.js";
 import { countriesRoutes } from "./integrations/countries.routes.js";
 import { geocodingRoutes } from "./integrations/geocoding.routes.js";
-import contactoRouter from "./integrations/contacto.routes.js";
+import { router as contactoRoutes } from "./integrations/contacto.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,12 +101,13 @@ const startServer = async () => {
     app.use("/buses", busesRoutes);
 
     // contactoRouter ya viene con el prefijo /api/contacto internamente
-    app.use(contactoRouter);
+    app.use("/contacto", contactoRouter);
 
     // Vuelos montado en /vuelos
     app.use("/vuelos", vuelosRoutes);
 
     app.use("/pagos", pagosRoutes);
+
     app.use("/api/countries", countriesRoutes);
     app.use("/api/geocoding", geocodingRoutes);
 
