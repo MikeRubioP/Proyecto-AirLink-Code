@@ -46,7 +46,6 @@ export default function Home() {
 
   // ==== CARGA DE TERMINALES PARA SELECTS (BD) ====
   useEffect(() => {
-<<<<<<< HEAD
     const loadTerminales = async () => {
       setLoadingTerminales(true);
       try {
@@ -61,39 +60,6 @@ export default function Home() {
       }
     };
     loadTerminales();
-=======
-    fetch("http://localhost:5174/destinos")
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("📦 Datos recibidos:", data);
-<<<<<<< HEAD
-
-        if (Array.isArray(data)) {
-          setDestinos(data);
-        } else if (Array.isArray(data.items)) {
-          // ✅ tu caso
-=======
-        if (Array.isArray(data)) {
-          setDestinos(data);
-        } else if (Array.isArray(data.items)) {
->>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
-          setDestinos(data.items);
-        } else {
-          console.warn("⚠️ Formato inesperado en respuesta:", data);
-          setDestinos([]);
-        }
-<<<<<<< HEAD
-
-=======
->>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("❌ Error cargando destinos:", err);
-        setDestinos([]);
-        setLoading(false);
-      });
->>>>>>> 476c486927240a7135d8d34eea26a478a8eea084
   }, []);
 
   // ==== CARGA DE DESTINOS PARA TARJETAS (ya lo usabas) ====
@@ -177,40 +143,14 @@ export default function Home() {
     const payload = {
       origen: desde || "SCL",
       destino: hacia || "",
-<<<<<<< HEAD
       fechaIda: ida || hoyISO,
       fechaVuelta: tripType === "round" ? vuelta || "" : "",
-=======
-      fechaIda: ida || "",
-<<<<<<< HEAD
-      fechaVuelta: tripType === "round" ? vuelta || "" : "",
-=======
-      fechaVuelta: tripType === "round" ? (vuelta || "") : "",
-      clase: clase || "eco",
->>>>>>> 476c486927240a7135d8d34eea26a478a8eea084
       tipoViaje: tripType === "round" ? "ida-vuelta" : "solo-ida",
       pasajeros: 1,
       clase: "eco",
     };
 
-<<<<<<< HEAD
-=======
-    // Guardar también en contexto si lo usas en otros pasos
-    setForm((prev) => ({
-      ...prev,
-      ...payload,
->>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
-      vueloIda: null,
-      vueloVuelta: null,
-    }));
-
-<<<<<<< HEAD
-    navigate("/vuelos/buscar");
-=======
-    // 🔁 redirige a la página de búsqueda con los datos
->>>>>>> 476c486927240a7135d8d34eea26a478a8eea084
     navigate("/vuelos/buscar", { state: { search: payload } });
->>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
   };
 
   // ==== RENDER ====
@@ -327,16 +267,8 @@ export default function Home() {
                 required
               />
 
-<<<<<<< HEAD
-              {/* Vuelta (solo si es ida y vuelta) */}
-=======
               {/* Vuelta (solo round trip) */}
-<<<<<<< HEAD
               {tripType === "round" ? (
-=======
->>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
-              {tripType === "round" && (
->>>>>>> 476c486927240a7135d8d34eea26a478a8eea084
                 <input
                   type="date"
                   min={ida || hoyISO}
@@ -349,26 +281,7 @@ export default function Home() {
                 <div className="hidden md:block" />
               )}
 
-<<<<<<< HEAD
               {/* Botón Buscar */}
-=======
-<<<<<<< HEAD
-=======
-              {/* Clase */}
-              <select
-                className="flex-1 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:ring-2 focus:ring-purple-400 outline-none"
-                value={clase}
-                onChange={(e) => setClase(e.target.value)}
-              >
-                <option value="">Clase</option>
-                <option value="eco">Económica</option>
-                <option value="premium">Premium</option>
-                <option value="ejec">Ejecutiva</option>
-              </select>
-
->>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
-              {/* Botón */}
->>>>>>> 476c486927240a7135d8d34eea26a478a8eea084
               <button
                 type="submit"
                 className="h-12 px-6 bg-[#6b21a8] hover:bg-[#581c87] text-white rounded-xl font-medium shadow-md flex items-center justify-center gap-2"
@@ -417,77 +330,6 @@ export default function Home() {
           </Link>
         </div>
       </section>
-<<<<<<< HEAD
-=======
-
-      {/* RESEÑAS */}
-      <section className="bg-white py-16">
-        <h2 className="text-center text-3xl font-bold mb-10 text-gray-800">
-          Reseñas de nuestros clientes
-        </h2>
-
-        <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 px-4">
-<<<<<<< HEAD
-          {[
-            {
-              id: 1,
-              nombre: "Julio Tapia.",
-              cargo: "Traveler",
-              texto:
-                "El servicio fue excelente, el vuelo cómodo y puntual. ¡Altamente recomendado!",
-              rating: 5,
-            },
-            {
-              id: 2,
-              nombre: "Alan Gajardo",
-              cargo: "Traveler",
-              texto:
-                "Muy buena experiencia con AirLink, fácil de reservar y excelente atención.",
-              rating: 4,
-            },
-            {
-              id: 3,
-              nombre: "Daniel Sepúlveda",
-              cargo: "Traveler",
-              texto:
-                "Todo fue rápido y sin complicaciones. Definitivamente volveré a viajar con ellos.",
-              rating: 5,
-            },
-          ].map((r) => (
-            <div
-              key={r.id}
-              className="bg-gray-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all"
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <img
-                  src={BannersHome}
-                  alt={r.nombre}
-                  className="w-12 h-12 rounded-full object-cover border border-gray-300"
-                />
-                <div>
-                  <h4 className="font-semibold">{r.nombre}</h4>
-                  <p className="text-sm text-gray-500">{r.cargo}</p>
-                </div>
-              </div>
-              <p className="text-gray-600 text-sm mb-2">{r.texto}</p>
-              <div className="text-yellow-400 text-lg">
-                {"★".repeat(r.rating)}
-                {"☆".repeat(5 - r.rating)}
-              </div>
-=======
-          {[ /* ...tus reseñas... */ ].map((r) => (
-            <div key={r.id} className="bg-gray-50 p-6 rounded-2xl shadow-md hover:shadow-lg transition-all">
-              {/* ... */}
->>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
-            </div>
-          ))}
-        </div>
-      </section>
-<<<<<<< HEAD
-
-=======
->>>>>>> bf6e12329deec9573a3055a7bd8584461acecf66
->>>>>>> 476c486927240a7135d8d34eea26a478a8eea084
     </div>
   );
 }
