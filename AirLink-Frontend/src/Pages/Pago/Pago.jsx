@@ -17,9 +17,9 @@ const safeParse = (k) => {
   }
 };
 
-const pickFirst = (...vals) => vals.find((v) => v != null) ?? null;
+const pickFirst = (...vals) => vals.find(Boolean) || null;
 
-export default function Pago() {
+const Pago = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -230,35 +230,6 @@ export default function Pago() {
   };
 
   const resumen = useMemo(() => {
-    const vIda = vueloIda
-      ? {
-        idViaje: vueloIda.idViaje ?? vueloIda.id ?? null,
-        empresa: vueloIda.empresa ?? vueloIda.airline ?? "—",
-        origen: vueloIda.origenCodigo ?? vueloIda.origen ?? origen,
-        destino: vueloIda.destinoCodigo ?? vueloIda.destino ?? destino,
-        horaSalida: vueloIda.horaSalida || "",
-        horaLlegada: vueloIda.horaLlegada || "",
-        tarifaNombre: tarifaIda?.nombreTarifa ?? tarifaIda?.nombre ?? "Tarifa",
-        precio: precioIda,
-      }
-      : null;
-
-    const vVuelta = vueloVuelta
-      ? {
-        idViaje: vueloVuelta.idViaje ?? vueloVuelta.id ?? null,
-        empresa: vueloVuelta.empresa ?? vueloVuelta.airline ?? vIda?.empresa ?? "—",
-        origen: vueloVuelta.origenCodigo ?? vueloVuelta.origen ?? destino,
-        destino: vueloVuelta.destinoCodigo ?? vueloVuelta.destino ?? origen,
-        horaSalida: vueloVuelta.horaSalida || "",
-        horaLlegada: vueloVuelta.horaLlegada || "",
-        tarifaNombre:
-          tarifaVuelta?.nombreTarifa ?? tarifaVuelta?.nombre ?? "Tarifa",
-        precio: precioVuelta,
-      }
-      : null;
-
-    const total = totalVuelos + (skipBus ? 0 : totalBuses);
-
     return {
       vuelo: vueloNorm
         ? {
@@ -273,24 +244,10 @@ export default function Pago() {
         }
         : null,
       buses: skipBus ? [] : selectedBuses,
-      total,
+      total: totalVuelo + (skipBus ? 0 : totalBuses),
       pasajero: passengerData,
     };
-  }, [
-    vueloIda,
-    vueloVuelta,
-    tarifaIda,
-    tarifaVuelta,
-    precioIda,
-    precioVuelta,
-    totalVuelos,
-    selectedBuses,
-    totalBuses,
-    skipBus,
-    passengerData,
-    origen,
-    destino,
-  ]);
+  }, [vueloNorm, tarifaNorm, totalVuelo, selectedBuses, totalBuses, skipBus, passengerData]);
 
   const handlePayment = async () => {
     try {
@@ -553,7 +510,7 @@ export default function Pago() {
               <div className="bg-gray-50 rounded-xl p-4">
                 <h3 className="font-bold text-gray-900 mb-3">Resumen de tu reserva</h3>
                 <div className="space-y-2 text-sm">
-                  {resumen.vueloIda && (
+                  {resumen.vuelo && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Vuelo – {resumen.vuelo.origen} → {resumen.vuelo.destino} · {resumen.vuelo.tarifaNombre}</span>
                       <span className="font-semibold">{CLP(resumen.vuelo.precio)}</span>
@@ -589,3 +546,5 @@ export default function Pago() {
     </div>
   );
 };
+
+export default Pago;

@@ -1,51 +1,35 @@
 // src/Components/Guards.jsx
 import { Navigate, useLocation } from "react-router-dom";
 
-/* -------- Util seguro para leer JSON desde localStorage -------- */
+/* Util seguro para leer JSON desde localStorage */
 const getLS = (k) => {
   try {
     const raw = localStorage.getItem(k);
-    if (!raw || raw === "null" || raw === "undefined") return null;
+    if (raw === null) return null;
+    if (raw === "null" || raw === "undefined" || raw.trim() === "") return null;
     return JSON.parse(raw);
   } catch {
     return null;
   }
 };
 
-const isNonEmptyStr = (v) => typeof v === "string" && v.trim().length > 0;
+/* ======== Reglas de negocio reutilizables ======== */
 
-/* -------- Frescura opcional (desactiva si no usas __ts) -------- */
-const isFresh = (obj, maxMinutes = 120) => {
-  if (!obj || typeof obj !== "object") return false;
-  if (typeof obj.__ts !== "number") return false;
-  const ageMin = (Date.now() - obj.__ts) / 60000;
-  return ageMin >= 0 && ageMin <= maxMinutes;
-};
-
-/* -------- Reglas de negocio -------- */
+// 1) ¿Hay búsqueda hecha?
 const hasSearch = () => {
-  const s = getLS("searchState");
-  const shapeOK =
-    s &&
-    isNonEmptyStr(s.origen) &&
-    isNonEmptyStr(s.destino) &&
-    (isNonEmptyStr(s.fechaIda) || typeof s.fechaIda === "number");
-  // si no usas timestamps, cambia a: return Boolean(shapeOK);
-  return Boolean(shapeOK && isFresh(s, 120));
+  const s = getLS("searchState") || getLS("vueloSeleccionado");
+  return Boolean(s?.origen && s?.destino && s?.fechaIda);
 };
 
+// 2) ¿Hay vuelo de ida elegido?
 const hasFlightOut = () => {
   const d = getLS("vueloSeleccionado");
-  const shapeOK =
-    d &&
-    (isNonEmptyStr(d.vueloIda) || typeof d.vueloIda === "object") &&
-    (isNonEmptyStr(d.tarifaIda) || typeof d.tarifaIda === "object");
-  return Boolean(shapeOK && isFresh(d, 120));
+  return Boolean(d?.vueloIda && d?.tarifaIda);
 };
 
+// 3) ¿El viaje es ida y vuelta?
 const isRoundTrip = () => {
-  const s = getLS("searchState");
-  if (!isFresh(s, 120)) return false;
+  const s = getLS("searchState") || {};
   return Boolean(
     s?.idaVuelta === true ||
       s?.roundTrip === true ||
@@ -55,71 +39,91 @@ const isRoundTrip = () => {
   );
 };
 
+// 4) Si es ida y vuelta, ¿hay vuelo de vuelta elegido?
 const hasReturnIfNeeded = () => {
-  if (!isRoundTrip()) return true;
+  if (!isRoundTrip()) return true; // si es solo ida, no exigir
   const d = getLS("vueloSeleccionado");
-  const shapeOK =
-    d &&
-    (isNonEmptyStr(d.vueloVuelta) || typeof d.vueloVuelta === "object") &&
-    (isNonEmptyStr(d.tarifaVuelta) || typeof d.tarifaVuelta === "object");
-  return Boolean(shapeOK && isFresh(d, 120));
+  return Boolean(d?.vueloVuelta && d?.tarifaVuelta);
 };
 
+// 5) ¿Checkout listo?
 const isCheckoutReady = () => {
   const chk = getLS("checkout") || getLS("checkout_ready");
+  // Acepta varias formas posibles de marcar "listo"
   const ready =
     chk === true ||
     chk?.ready === true ||
     chk?.estado === "ready" ||
     chk?.status === "ready";
-  return Boolean(ready && isFresh(chk, 120) && hasFlightOut() && hasReturnIfNeeded());
+  // En fallback, que exista al menos ida (y si aplica, vuelta)
+  return ready && hasFlightOut() && hasReturnIfNeeded();
 };
 
+// 6) ¿Usuario autenticado?
 const isAuth = () => {
-  const token = localStorage.getItem("token") || localStorage.getItem("authToken");
+  const token =
+    localStorage.getItem("token") || localStorage.getItem("authToken");
   const user = getLS("user") || getLS("auth");
   return Boolean(token || user?.id || user?.email);
 };
 
-/* -------- Redirección por defecto: Home -------- */
-const DEFAULT_REDIRECT = "/";
+// 6.1) **Checkout invitado permitido** (opción B)
+// Si el checkout está listo, permitimos pasar aunque no haya sesión.
+const hasGuestCheckout = () => {
+  const chk = getLS("checkout") || getLS("checkout_ready");
+  return Boolean(
+    chk === true ||
+      chk?.ready === true ||
+      chk?.estado === "ready" ||
+      chk?.status === "ready"
+  );
+};
 
-/* -------- Guards (exports nombrados) -------- */
+/* ======== Guards como componentes ======== */
+
 export function RequireSearch({ children }) {
   const loc = useLocation();
-  return hasSearch()
-    ? children
-    : <Navigate to={DEFAULT_REDIRECT} state={{ from: loc }} replace />;
+  return hasSearch() ? (
+    children
+  ) : (
+    <Navigate to="/vuelos" state={{ from: loc }} replace />
+  );
 }
 
 export function RequireFlightOut({ children }) {
   const loc = useLocation();
-  // si quieres exigir también búsqueda fresca aquí:
-  // return (hasSearch() && hasFlightOut()) ? children : <Navigate ... />
-  return hasFlightOut()
-    ? children
-    : <Navigate to={DEFAULT_REDIRECT} state={{ from: loc }} replace />;
+  return hasFlightOut() ? (
+    children
+  ) : (
+    <Navigate to="/vuelos" state={{ from: loc }} replace />
+  );
 }
 
 export function RequireReturnIfRoundTrip({ children }) {
   const loc = useLocation();
-  return hasReturnIfNeeded()
-    ? children
-    : <Navigate to={DEFAULT_REDIRECT} state={{ from: loc }} replace />;
+  return hasReturnIfNeeded() ? (
+    children
+  ) : (
+    <Navigate to="/vuelos/vuelta" state={{ from: loc }} replace />
+  );
 }
 
 export function RequireCheckoutReady({ children }) {
   const loc = useLocation();
-  return isCheckoutReady()
-    ? children
-    : <Navigate to={DEFAULT_REDIRECT} state={{ from: loc }} replace />;
+  return isCheckoutReady() ? (
+    children
+  ) : (
+    <Navigate to="/vuelos/detalleviaje" state={{ from: loc }} replace />
+  );
 }
 
+/**
+ * Opción B:
+ * - Permite el acceso si hay sesión (token/usuario) **o** si el checkout invitado está listo.
+ * - Mantiene el redirect clásico a /mi-cuenta cuando no se cumple ninguna de las dos.
+ */
 export function RequireAuth({ children }) {
   const loc = useLocation();
-  return isAuth()
-    ? children
-    : <Navigate to="/mi-cuenta" state={{ from: loc }} replace />;
+  if (isAuth() || hasGuestCheckout()) return children;
+  return <Navigate to="/mi-cuenta" state={{ from: loc }} replace />;
 }
-
-/* (Opcional) Sin export default para evitar confusiones con named exports */

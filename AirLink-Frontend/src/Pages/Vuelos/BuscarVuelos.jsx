@@ -157,9 +157,34 @@ export default function BuscarVuelos() {
     setFechasDisponibles(fechas);
   };
 
-  // Selección de vuelo (con tarifa)
+  /* ============================================================
+     SELECCIÓN DE VUELO (GUARDA searchState + vueloSeleccionado)
+     ============================================================ */
   const seleccionarVuelo = (vueloConTarifa) => {
     const t = vueloConTarifa?.tarifaElegida;
+
+    // 1) Normaliza fechas y flags
+    const _fechaIda = toISO(fechaIda) ?? todayISO;
+    const _fechaVuelta = toISO(fechaVuelta) ?? "";
+    const esRT = tipoViaje === "ida-vuelta";
+
+    // 2) Guarda un searchState compatible con los guards
+    const search = {
+      origen,
+      destino,
+      fechaIda: _fechaIda,
+      fechaVuelta: _fechaVuelta,
+      clase,
+      pasajeros,
+      idaVuelta: esRT,
+      roundTrip: esRT,
+      tipo: esRT ? "roundtrip" : "oneway",
+      tipoViaje: esRT ? "RT" : "OW",
+      __ts: Date.now(),
+    };
+    localStorage.setItem("searchState", JSON.stringify(search));
+
+    // 3) Guarda selección de ida + tarifa
     const datosVuelo = {
       vueloIda: vueloConTarifa,
       tarifaIda: t
@@ -171,20 +196,23 @@ export default function BuscarVuelos() {
             cupos: t.cupos,
           }
         : null,
+      // redundamos info clave por si el guard revisa aquí
       origen,
       destino,
-      fechaIda: toISO(fechaIda) ?? todayISO,
-      fechaVuelta: toISO(fechaVuelta) ?? "",
+      fechaIda: _fechaIda,
+      fechaVuelta: _fechaVuelta,
       clase,
       pasajeros,
       tipoViaje,
+      __ts: Date.now(),
     };
-
     localStorage.setItem("vueloSeleccionado", JSON.stringify(datosVuelo));
-    if (tipoViaje === "ida-vuelta") {
-      navigate("/vuelos/vuelta", { state: datosVuelo });
+
+    // 4) Navega sólo después de persistir
+    if (esRT) {
+      navigate("/vuelos/vuelta", { replace: true, state: datosVuelo });
     } else {
-      navigate("/vuelos/detalleviaje", { state: datosVuelo });
+      navigate("/vuelos/detalleviaje", { replace: true, state: datosVuelo });
     }
   };
 
