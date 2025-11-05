@@ -1,64 +1,74 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+const API_BASE = "http://localhost:5174";
+
+// Helpers
+const toISO = (val) => {
+  const d = val instanceof Date ? val : new Date(val);
+  return isNaN(d) ? null : d.toISOString().split("T")[0];
+};
+const todayISO = toISO(new Date());
+const fmtCLP = (n) =>
+  Number(n || 0).toLocaleString("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0,
+  });
+const getLogoUrl = (logo) => {
+  if (!logo) return null;
+  if (logo.startsWith("http")) return logo;
+  return `${API_BASE}${logo}`;
+};
+
 export default function BuscarVuelos() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const destinoInfo = location.state?.destinoInfo; // si vienes desde una tarjeta
-  const searchState = location.state?.search;      // si vienes desde Home (navigate con state)
+  const destinoInfo = location.state?.destinoInfo; // desde tarjeta
+  const searchState = location.state?.search;      // desde Home
 
-  // Estados para el formulario de búsqueda
+  // Form state
   const [origen, setOrigen] = useState("SCL");
   const [destino, setDestino] = useState("");
-  const [fechaIda, setFechaIda] = useState("");
+  const [fechaIda, setFechaIda] = useState(todayISO);
   const [fechaVuelta, setFechaVuelta] = useState("");
   const [pasajeros, setPasajeros] = useState(1);
   const [tipoViaje, setTipoViaje] = useState("solo-ida");
   const [clase, setClase] = useState("eco");
-  const [vueloHover, setVueloHover] = useState(null);
 
-  // Estados para resultados
+  // UI state
+  const [vueloHover, setVueloHover] = useState(null);
   const [vuelos, setVuelos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [ordenamiento, setOrdenamiento] = useState("baratos");
   const [error, setError] = useState(null);
-
-  // Estados para el calendario de fechas
   const [fechasDisponibles, setFechasDisponibles] = useState([]);
 
-  // ---- helpers ----
-  const fmtCLP = (n) =>
-    Number(n || 0).toLocaleString("es-CL", {
-      style: "currency",
-      currency: "CLP",
-      maximumFractionDigits: 0,
-    });
-
-  // Función para obtener el código de terminal desde la ciudad
+  // --- API helpers
   const obtenerCodigoCiudad = async (ciudad) => {
     try {
-      const response = await fetch(
-        `http://localhost:5174/vuelos/destinos/${encodeURIComponent(ciudad)}/codigo`
+      const res = await fetch(
+        `${API_BASE}/vuelos/destinos/${encodeURIComponent(ciudad)}/codigo`
       );
-      if (response.ok) {
-        const data = await response.json();
+      if (res.ok) {
+        const data = await res.json();
         return data.codigo;
       }
-    } catch (error) {
-      console.error("Error obteniendo código de ciudad:", error);
+    } catch (e) {
+      console.error("Error obteniendo código de ciudad:", e);
     }
     return null;
   };
 
-  // Inicializa desde state (Home) o desde destinoInfo o fecha por defecto
+  // Init con state de navegación (o defaults seguros)
   useEffect(() => {
     const init = async () => {
       if (searchState) {
         setOrigen(searchState.origen ?? "SCL");
         setDestino(searchState.destino ?? "");
-        setFechaIda(searchState.fechaIda ?? new Date().toISOString().split("T")[0]);
-        setFechaVuelta(searchState.fechaVuelta ?? "");
+        setFechaIda(toISO(searchState.fechaIda) ?? todayISO);
+        setFechaVuelta(toISO(searchState.fechaVuelta) ?? "");
         setTipoViaje(searchState.tipoViaje ?? "solo-ida");
         setClase(searchState.clase ?? "eco");
         setPasajeros(searchState.pasajeros ?? 1);
@@ -67,43 +77,37 @@ export default function BuscarVuelos() {
           const codigo = await obtenerCodigoCiudad(destinoInfo.ciudad);
           if (codigo) setDestino(codigo);
         }
-        setFechaIda((prev) => prev || new Date().toISOString().split("T")[0]);
+        setFechaIda((prev) => toISO(prev) ?? todayISO);
       }
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
-  // Buscar cuando cambian parámetros relevantes
+  // Buscar + fechas cada vez que cambian parámetros
   useEffect(() => {
-    if (origen && destino && fechaIda) {
-      buscarVuelos();
-      generarFechasDisponibles();
+    const iso = toISO(fechaIda);
+    if (origen && destino && iso) {
+      buscarVuelos(origen, destino, iso, clase, ordenamiento);
+      generarFechasDisponibles(iso);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origen, destino, fechaIda, clase, ordenamiento]);
 
-  // ---- API: buscar vuelos y adjuntar tarifas ----
-  const buscarVuelos = async () => {
+  const buscarVuelos = async (org, dest, fechaISO, claseSel, orden) => {
     setLoading(true);
     setError(null);
-
     try {
-      const response = await fetch(
-        `http://localhost:5174/vuelos/buscar?origen=${origen}&destino=${destino}&fecha=${fechaIda}&clase=${clase}`
-      );
-
-      if (!response.ok) {
-        throw new Error("Error al buscar vuelos");
-      }
-
+      const url = `${API_BASE}/vuelos/buscar?origen=${org}&destino=${dest}&fecha=${fechaISO}&clase=${claseSel}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Error al buscar vuelos");
       const data = await response.json();
 
-      // Trae tarifas por cada vuelo en paralelo y calcula precioDesde (mínimo)
+      // Cargar tarifas por vuelo y calcular precioDesde
       const withTarifas = await Promise.all(
         data.map(async (v) => {
           try {
-            const r = await fetch(`http://localhost:5174/vuelos/viajes/${v.idViaje}/tarifas`);
+            const r = await fetch(`${API_BASE}/vuelos/viajes/${v.idViaje}/tarifas`);
             const tarifas = r.ok ? await r.json() : [];
             const minTarifa = tarifas.length
               ? Math.min(...tarifas.map((t) => Number(t.precio)))
@@ -115,19 +119,18 @@ export default function BuscarVuelos() {
         })
       );
 
-      // Ordenar según criterio seleccionado
       let vuelosOrdenados = [...withTarifas];
-      if (ordenamiento === "baratos") {
+      if (orden === "baratos") {
         vuelosOrdenados.sort((a, b) => a.precioDesde - b.precioDesde);
-      } else if (ordenamiento === "rapidos") {
+      } else if (orden === "rapidos") {
         vuelosOrdenados.sort((a, b) => a.duracion - b.duracion);
-      } else if (ordenamiento === "temprano") {
+      } else if (orden === "temprano") {
         vuelosOrdenados.sort((a, b) => a.horaSalida.localeCompare(b.horaSalida));
       }
 
       setVuelos(vuelosOrdenados);
-    } catch (error) {
-      console.error("Error buscando vuelos:", error);
+    } catch (e) {
+      console.error(e);
       setError("No se pudieron cargar los vuelos. Intenta nuevamente.");
       setVuelos([]);
     } finally {
@@ -135,27 +138,28 @@ export default function BuscarVuelos() {
     }
   };
 
-  const generarFechasDisponibles = () => {
+  const generarFechasDisponibles = (baseISO) => {
+    if (!baseISO) return;
     const fechas = [];
-    const fechaBase = new Date(fechaIda);
-
+    const fechaBase = new Date(baseISO);
     for (let i = -3; i <= 3; i++) {
-      const fecha = new Date(fechaBase);
-      fecha.setDate(fechaBase.getDate() + i);
+      const d = new Date(fechaBase);
+      d.setDate(fechaBase.getDate() + i);
+      const iso = toISO(d);
+      if (!iso) continue;
       fechas.push({
-        fecha: fecha.toISOString().split("T")[0],
-        dia: fecha.toLocaleDateString("es-ES", { weekday: "short" }),
-        numero: fecha.getDate(),
-        mes: fecha.toLocaleDateString("es-ES", { month: "short" }),
+        fecha: iso,
+        dia: d.toLocaleDateString("es-ES", { weekday: "short" }),
+        numero: d.getDate(),
+        mes: d.toLocaleDateString("es-ES", { month: "short" }),
       });
     }
     setFechasDisponibles(fechas);
   };
 
-  // Actualizado para aceptar vuelo con tarifaElegida
+  // Selección de vuelo (con tarifa)
   const seleccionarVuelo = (vueloConTarifa) => {
     const t = vueloConTarifa?.tarifaElegida;
-
     const datosVuelo = {
       vueloIda: vueloConTarifa,
       tarifaIda: t
@@ -169,14 +173,14 @@ export default function BuscarVuelos() {
         : null,
       origen,
       destino,
-      fechaIda,
-      fechaVuelta,
+      fechaIda: toISO(fechaIda) ?? todayISO,
+      fechaVuelta: toISO(fechaVuelta) ?? "",
       clase,
       pasajeros,
+      tipoViaje,
     };
 
     localStorage.setItem("vueloSeleccionado", JSON.stringify(datosVuelo));
-
     if (tipoViaje === "ida-vuelta") {
       navigate("/vuelos/vuelta", { state: datosVuelo });
     } else {
@@ -190,16 +194,9 @@ export default function BuscarVuelos() {
     return `${horas}h ${mins}min`;
   };
 
-  // Función para obtener URL completa del logo
-  const getLogoUrl = (logo) => {
-    if (!logo) return null;
-    if (logo.startsWith("http")) return logo;
-    return `http://localhost:5174${logo}`;
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header con información del destino */}
+      {/* Header con info del destino (si venías desde tarjeta) */}
       {destinoInfo && (
         <div
           className="bg-cover bg-center py-8"
@@ -210,9 +207,7 @@ export default function BuscarVuelos() {
           }}
         >
           <div className="max-w-7xl mx-auto px-4">
-            <h1 className="text-white text-3xl font-bold mb-2">
-              {destinoInfo.nombre}
-            </h1>
+            <h1 className="text-white text-3xl font-bold mb-2">{destinoInfo.nombre}</h1>
             <p className="text-white text-lg">
               {destinoInfo.ciudad}, {destinoInfo.pais}
             </p>
@@ -269,7 +264,6 @@ export default function BuscarVuelos() {
             Vuelos disponibles {origen} → {destino}
           </h2>
           <div className="flex items-center gap-4">
-            {/* Selector de tipo de viaje */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">Tipo de viaje:</span>
               <select
@@ -281,8 +275,6 @@ export default function BuscarVuelos() {
                 <option value="ida-vuelta">Ida y vuelta</option>
               </select>
             </div>
-
-            {/* Selector de ordenamiento */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-600">Ordenar por:</span>
               <select
@@ -298,14 +290,12 @@ export default function BuscarVuelos() {
           </div>
         </div>
 
-        {/* Mensaje de error */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4">
             {error}
           </div>
         )}
 
-        {/* Lista de vuelos */}
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mx-auto mb-4"></div>
@@ -314,9 +304,7 @@ export default function BuscarVuelos() {
         ) : vuelos.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">✈️</div>
-            <p className="text-gray-500 text-lg mb-2">
-              No se encontraron vuelos para esta búsqueda
-            </p>
+            <p className="text-gray-500 text-lg mb-2">No se encontraron vuelos para esta búsqueda</p>
             <p className="text-gray-400 text-sm">Intenta con otras fechas o destinos</p>
           </div>
         ) : (
@@ -329,7 +317,6 @@ export default function BuscarVuelos() {
                 <div className="flex justify-between items-center">
                   <div className="flex-1">
                     <div className="flex items-center gap-8">
-                      {/* Hora salida */}
                       <div>
                         <div className="text-3xl font-bold text-gray-800">
                           {vuelo.horaSalida}
@@ -339,22 +326,18 @@ export default function BuscarVuelos() {
                         </div>
                       </div>
 
-                      {/* Duración */}
                       <div className="flex-1 text-center">
                         <div className="text-sm text-gray-500 mb-1">Duración</div>
                         <div className="flex items-center justify-center gap-2">
                           <div className="h-px bg-gray-300 flex-1"></div>
                           <span className="text-sm font-medium text-gray-700">
-                            {formatearDuracion(vuelo.duracion)}
+                            {Math.floor(vuelo.duracion / 60)}h {vuelo.duracion % 60}min
                           </span>
                           <div className="h-px bg-gray-300 flex-1"></div>
                         </div>
-                        <div className="text-xs text-purple-600 mt-1 font-medium">
-                          Directo
-                        </div>
+                        <div className="text-xs text-purple-600 mt-1 font-medium">Directo</div>
                       </div>
 
-                      {/* Hora llegada */}
                       <div>
                         <div className="text-3xl font-bold text-gray-800">
                           {vuelo.horaLlegada}
@@ -365,7 +348,6 @@ export default function BuscarVuelos() {
                       </div>
                     </div>
 
-                    {/* Información adicional */}
                     <div className="mt-4 flex items-center gap-4 text-sm">
                       <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
                         {vuelo.empresaLogo && (
@@ -373,10 +355,7 @@ export default function BuscarVuelos() {
                             src={getLogoUrl(vuelo.empresaLogo)}
                             alt={vuelo.empresa}
                             className="h-8 w-auto object-contain"
-                            onError={(e) => {
-                              console.error(`Error cargando logo: ${vuelo.empresaLogo}`);
-                              e.currentTarget.style.display = "none";
-                            }}
+                            onError={(e) => (e.currentTarget.style.display = "none")}
                           />
                         )}
                       </div>
@@ -387,7 +366,6 @@ export default function BuscarVuelos() {
                     </div>
                   </div>
 
-                  {/* Precio y selección */}
                   <div className="text-right ml-8">
                     <div className="text-sm text-gray-500 mb-1">Desde / por persona</div>
                     <div className="text-3xl font-bold text-purple-600 mb-3">
@@ -405,29 +383,16 @@ export default function BuscarVuelos() {
                       {(vuelo.tarifas?.length ?? 0)} opciones de tarifa
                     </div>
 
-                    {/* Panel de tarifas */}
                     {vueloHover === vuelo.idViaje && (
                       <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-2xl border border-gray-200 z-50 p-6">
                         <div className="flex justify-between items-center mb-4 pb-3 border-b">
-                          <div className="flex items-center gap-4">
-                            <div className="bg-green-50 px-3 py-1 rounded-full">
-                              <span className="text-green-700 text-sm font-medium">
-                                Más económico
-                              </span>
-                            </div>
-                            <div className="bg-blue-50 px-3 py-1 rounded-full">
-                              <span className="text-blue-700 text-sm font-medium">
-                                Más rápido
-                              </span>
-                            </div>
-                          </div>
                           <div className="flex items-center gap-3 text-sm">
                             <span className="text-gray-600">
                               <span className="font-bold text-gray-800">{vuelo.horaSalida}</span>{" "}
                               {vuelo.origenCodigo}
                             </span>
                             <span className="text-gray-400">
-                              Duración {formatearDuracion(vuelo.duracion)}
+                              Duración {Math.floor(vuelo.duracion / 60)}h {vuelo.duracion % 60}min
                             </span>
                             <span className="text-gray-600">
                               <span className="font-bold text-gray-800">{vuelo.horaLlegada}</span>{" "}
@@ -440,16 +405,6 @@ export default function BuscarVuelos() {
                           >
                             ✕
                           </button>
-                        </div>
-
-                        <div className="mb-3">
-                          <span className="text-sm text-gray-600">Directo</span>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Operado por <span className="text-purple-600">🛩️ {vuelo.empresa}</span>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {vuelo.modelo} incluye <span className="font-medium">✈️ 🍷 📶 💺 📺</span>
-                          </div>
                         </div>
 
                         <div className="text-sm font-semibold text-gray-800 mb-3">
@@ -473,83 +428,44 @@ export default function BuscarVuelos() {
                             return (
                               <div key={t.idTarifa} className={cardClass}>
                                 <div className="flex items-center gap-2 mb-3">
-                                  {!premium && (
-                                    <div className="h-1 w-8 rounded bg-green-500"></div>
-                                  )}
-                                  <h4
-                                    className={`font-semibold text-sm ${
-                                      premium ? "text-white" : ""
-                                    }`}
-                                  >
+                                  {!premium && <div className="h-1 w-8 rounded bg-green-500"></div>}
+                                  <h4 className={`font-semibold text-sm ${premium ? "text-white" : ""}`}>
                                     {nombre}
                                   </h4>
                                 </div>
 
-                                {/* bullets rápidos por tipo */}
-                                <ul
-                                  className={`space-y-2 text-xs mb-4 min-h-[200px] ${
-                                    premium ? "text-gray-200" : "text-gray-700"
-                                  }`}
-                                >
+                                <ul className={`space-y-2 text-xs mb-4 min-h-[200px] ${
+                                  premium ? "text-gray-200" : "text-gray-700"
+                                }`}>
                                   {light && (
                                     <>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Bolso o mochila
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Maleta pequeña 12 kg
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Cambio con cargo + diferencia
-                                      </li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Bolso o mochila</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Maleta pequeña 12 kg</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Cambio con cargo + diferencia</li>
                                     </>
                                   )}
                                   {standard && (
                                     <>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Bolso o mochila
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Maleta pequeña 12 kg
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>1 equipaje de bodega 23 kg
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Cambio con cargo + diferencia
-                                      </li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Bolso o mochila</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Maleta pequeña 12 kg</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>1 equipaje de bodega 23 kg</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Cambio con cargo + diferencia</li>
                                     </>
                                   )}
                                   {full && (
                                     <>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Bolso o mochila
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Maleta pequeña 12 kg
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>1 equipaje de bodega 23 kg
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Cambio sin cargo + diferencia
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-500">✓</span>Selección de asiento Estándar
-                                      </li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Bolso o mochila</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Maleta pequeña 12 kg</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>1 equipaje de bodega 23 kg</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Cambio sin cargo + diferencia</li>
+                                      <li className="flex gap-2"><span className="text-green-500">✓</span>Selección de asiento Estándar</li>
                                     </>
                                   )}
                                   {premium && (
                                     <>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-400">✓</span>2 equipajes de bodega 23 kg
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-400">✓</span>Asiento cama
-                                      </li>
-                                      <li className="flex gap-2">
-                                        <span className="text-green-400">✓</span>Embarque prioritario
-                                      </li>
+                                      <li className="flex gap-2"><span className="text-green-400">✓</span>2 equipajes de bodega 23 kg</li>
+                                      <li className="flex gap-2"><span className="text-green-400">✓</span>Asiento cama</li>
+                                      <li className="flex gap-2"><span className="text-green-400">✓</span>Embarque prioritario</li>
                                     </>
                                   )}
                                 </ul>
@@ -562,7 +478,7 @@ export default function BuscarVuelos() {
                                     {t.moneda} {Number(t.precio).toLocaleString("es-CL")}
                                   </div>
                                   <div className={`${premium ? "text-gray-300" : "text-gray-500"} text-xs mb-3`}>
-                                    Por pasajero<br />Incluye tasas e impuestos
+                                    Por pasajero<br/>Incluye tasas e impuestos
                                   </div>
 
                                   <button
@@ -571,7 +487,7 @@ export default function BuscarVuelos() {
                                         ...vuelo,
                                         tarifaElegida: {
                                           idTarifa: t.idTarifa,
-                                          nombre: nombre,
+                                          nombre,
                                           precio: Number(t.precio),
                                           moneda: t.moneda,
                                           cupos: t.cupos,
@@ -579,9 +495,8 @@ export default function BuscarVuelos() {
                                       })
                                     }
                                     className={`w-full py-2 rounded text-sm font-medium transition-all ${
-                                      premium
-                                        ? "bg-white text-gray-900 hover:bg-gray-100"
-                                        : "bg-purple-600 text-white hover:bg-purple-700"
+                                      premium ? "bg-white text-gray-900 hover:bg-gray-100"
+                                              : "bg-purple-600 text-white hover:bg-purple-700"
                                     }`}
                                   >
                                     {light ? "Continuar con Light" : "Elegir"}

@@ -4,11 +4,13 @@ dotenv.config(); // Cargar variables de entorno lo antes posible
 
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import mysql from "mysql2/promise";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { router as authRoutes } from "./auth.routes.js";
+// Rutas
+import { router as authRoutes } from "./integrations/auth.routes.js";
 import { router as destinosRoutes } from "./integrations/destinos.routes.js";
 import { router as dpaRoutes } from "./integrations/dpa.routes.js";
 import { router as busesRoutes } from "./integrations/buses.routes.js";
@@ -17,9 +19,11 @@ import { router as uploadRoutes } from "./integrations/upload.routes.js";
 import { router as pagosRoutes } from "./integrations/pagos.routes.js";
 import { countriesRoutes } from "./integrations/countries.routes.js";
 import { geocodingRoutes } from "./integrations/geocoding.routes.js";
+import contactoRouter from "./integrations/contacto.routes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
 const PORT = process.env.PORT ? Number(process.env.PORT) : 5174;
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173")
   .split(",")
@@ -28,7 +32,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || "http://localhost:5173")
 
 const startServer = async () => {
   try {
-    // Conexión a la base de datos con pool
+    // Pool de BD
     const db = await mysql.createPool({
       host: process.env.DB_HOST || "localhost",
       user: process.env.DB_USER || "airlink",
@@ -45,43 +49,68 @@ const startServer = async () => {
 
     const app = express();
 
-    // CORS
+    // ---------------------------
+    // Seguridad + CORS global
+    // ---------------------------
     app.use(
       cors({
         origin: ALLOWED_ORIGINS,
         credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allowedHeaders: ["Content-Type", "Authorization"],
       })
     );
 
-    // Middlewares
-    app.use(express.json());
+    // Helmet (sin CORP global, lo pondremos por-ruta en /uploads)
+    app.use(
+      helmet({
+        crossOriginEmbedderPolicy: false, // evita bloqueos con recursos embebidos
+        crossOriginOpenerPolicy: { policy: "same-origin" },
+        // No seteamos crossOriginResourcePolicy aquí
+      })
+    );
+
+    // Parsers
+    app.use(express.json({ limit: "1mb" }));
     app.use(express.urlencoded({ extended: true }));
 
-    // Archivos estáticos (logos/imagenes)
-    app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+    // ---------------------------
+    // Archivos estáticos /uploads
+    // Habilitamos CORS + CORP= cross-origin SOLO para este path
+    // ---------------------------
+    app.use(
+      "/uploads",
+      cors({ origin: ALLOWED_ORIGINS, credentials: true }),
+      (req, res, next) => {
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        next();
+      },
+      express.static(path.join(__dirname, "uploads"))
+    );
 
-    // Inyecta DB
+    // Inyectar DB en app
     app.set("db", db);
 
-    // ====================================
-    // RUTAS (antes del 404)
-    // ====================================
+    // ---------------------------
+    // Rutas
+    // ---------------------------
     app.use("/auth", authRoutes);
     app.use("/upload", uploadRoutes);
     app.use("/destinos", destinosRoutes);
     app.use("/dpa", dpaRoutes);
     app.use("/buses", busesRoutes);
 
-    // 🔧 Aquí el cambio clave: montar en /vuelos (no /api/vuelos)
+    // contactoRouter ya viene con el prefijo /api/contacto internamente
+    app.use(contactoRouter);
+
+    // Vuelos montado en /vuelos
     app.use("/vuelos", vuelosRoutes);
 
     app.use("/pagos", pagosRoutes);
     app.use("/api/countries", countriesRoutes);
     app.use("/api/geocoding", geocodingRoutes);
 
-    // Ruta de prueba
+    // Rutas de diagnóstico
     app.get("/api/test", (req, res) => {
       res.json({
         message: "API de AirLink funcionando correctamente ✈️",
@@ -89,7 +118,6 @@ const startServer = async () => {
       });
     });
 
-    // Health check
     app.get("/health", async (req, res) => {
       try {
         await db.query("SELECT 1");
@@ -126,11 +154,11 @@ const startServer = async () => {
       });
     });
 
-    // Start
+    // Arrancar
     app.listen(PORT, () => {
       console.log(`✅ Servidor corriendo en el puerto ${PORT}`);
       console.log(`🌍 http://localhost:${PORT}`);
-      console.log("\n📍 Rutas disponibles principales:");
+      console.log("\n📍 Rutas principales:");
       console.log("   - POST   /auth/login");
       console.log("   - POST   /auth/register");
       console.log("   - POST   /upload");
