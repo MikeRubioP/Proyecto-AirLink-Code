@@ -1,12 +1,58 @@
 // src/Pages/Usuario/Contacto.jsx
 import React, { useState } from "react";
 import Swal from "sweetalert2";
+import ValidatedInput from "../../Components/ValidatedInput.jsx";
+import { validateEmail, validateFullName, sanitizeInput } from "../../utils/validators.js"; // Ajusta la ruta
 
-// --- helpers ---
-const trimMax = (s = "", n = 5000) => s.toString().trim().slice(0, n);
-const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// sanitizado simple para texto plano (evita tags en el backend si alguien mira logs)
-const plain = (s) => trimMax(s, 4000).replace(/[<>]/g, "");
+// Validación personalizada para asunto
+const validateAsunto = (asunto) => {
+  const errors = [];
+  const trimmed = asunto.trim();
+
+  if (!trimmed) {
+    errors.push("El asunto es obligatorio");
+    return { isValid: false, errors, sanitized: "" };
+  }
+
+  if (trimmed.length < 3) {
+    errors.push("El asunto debe tener al menos 3 caracteres");
+  }
+
+  if (trimmed.length > 120) {
+    errors.push("El asunto no puede exceder 120 caracteres");
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    sanitized: trimmed,
+  };
+};
+
+// Validación personalizada para mensaje
+const validateMensaje = (mensaje) => {
+  const errors = [];
+  const trimmed = mensaje.trim();
+
+  if (!trimmed) {
+    errors.push("El mensaje es obligatorio");
+    return { isValid: false, errors, sanitized: "" };
+  }
+
+  if (trimmed.length < 10) {
+    errors.push("El mensaje debe tener al menos 10 caracteres");
+  }
+
+  if (trimmed.length > 4000) {
+    errors.push("El mensaje no puede exceder 4000 caracteres");
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    sanitized: trimmed,
+  };
+};
 
 export default function Contacto() {
   const [form, setForm] = useState({
@@ -16,41 +62,115 @@ export default function Contacto() {
     mensaje: "",
     hp: "", // honeypot: debe quedar vacío
   });
+
+  const [touched, setTouched] = useState({
+    nombre: false,
+    email: false,
+    asunto: false,
+    mensaje: false,
+  });
+
+  const [validationErrors, setValidationErrors] = useState({
+    nombre: [],
+    email: [],
+    asunto: [],
+    mensaje: [],
+  });
+
   const [sending, setSending] = useState(false);
 
   const onChange = (e) => {
     const { name, value } = e.target;
     setForm((f) => ({ ...f, [name]: value }));
+
+    // Validar en tiempo real si el campo ya fue tocado
+    if (touched[name]) {
+      validateField(name, value);
+    }
   };
 
-  const validate = () => {
-    const nombre = trimMax(form.nombre, 80);
-    const asunto = trimMax(form.asunto, 120);
-    const mensaje = trimMax(form.mensaje, 4000);
+  const validateField = (fieldName, value) => {
+    let validation;
 
-    if (form.hp) return false; // bot detectado
-    if (nombre.length < 2) {
-      Swal.fire("Nombre inválido", "Ingresa tu nombre (mínimo 2 caracteres).", "warning");
+    switch (fieldName) {
+      case "nombre":
+        validation = validateFullName(value);
+        break;
+      case "email":
+        validation = validateEmail(value);
+        break;
+      case "asunto":
+        validation = validateAsunto(value);
+        break;
+      case "mensaje":
+        validation = validateMensaje(value);
+        break;
+      default:
+        return true;
+    }
+
+    setValidationErrors((prev) => ({
+      ...prev,
+      [fieldName]: validation.errors,
+    }));
+
+    return validation.isValid;
+  };
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    setTouched((prev) => ({
+      ...prev,
+      [name]: true,
+    }));
+    validateField(name, value);
+  };
+
+  const validateAllFields = () => {
+    // Honeypot check (anti-bot)
+    if (form.hp) {
       return false;
     }
-    if (!emailRx.test(form.email)) {
-      Swal.fire("Correo inválido", "Escribe un correo válido.", "warning");
-      return false;
-    }
-    if (asunto.length < 3) {
-      Swal.fire("Asunto inválido", "El asunto debe tener al menos 3 caracteres.", "warning");
-      return false;
-    }
-    if (mensaje.length < 10) {
-      Swal.fire("Mensaje muy corto", "Cuéntanos tu caso con más detalle (≥10 caracteres).", "warning");
-      return false;
-    }
-    return true;
+
+    const nombreValidation = validateFullName(form.nombre);
+    const emailValidation = validateEmail(form.email);
+    const asuntoValidation = validateAsunto(form.asunto);
+    const mensajeValidation = validateMensaje(form.mensaje);
+
+    setValidationErrors({
+      nombre: nombreValidation.errors,
+      email: emailValidation.errors,
+      asunto: asuntoValidation.errors,
+      mensaje: mensajeValidation.errors,
+    });
+
+    setTouched({
+      nombre: true,
+      email: true,
+      asunto: true,
+      mensaje: true,
+    });
+
+    return (
+      nombreValidation.isValid &&
+      emailValidation.isValid &&
+      asuntoValidation.isValid &&
+      mensajeValidation.isValid
+    );
   };
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    if (!validate()) return;
+
+    if (!validateAllFields()) {
+      Swal.fire({
+        icon: "warning",
+        title: "Formulario incompleto",
+        text: "Por favor corrige los errores antes de enviar.",
+        confirmButtonColor: "#450d82",
+      });
+      return;
+    }
 
     const confirm = await Swal.fire({
       title: "¿Deseas enviar el mensaje? 💌",
@@ -62,17 +182,18 @@ export default function Contacto() {
       confirmButtonColor: "#450d82",
       cancelButtonColor: "#aaa",
     });
+
     if (!confirm.isConfirmed) return;
 
     setSending(true);
+
     try {
-      // payload “plano” (el backend debe parametrizar la inserción para evitar SQLi)
+      // Sanitizar todos los datos antes de enviar
       const payload = {
-        nombre: plain(form.nombre),
-        email: trimMax(form.email, 120),
-        asunto: plain(form.asunto),
-        mensaje: plain(form.mensaje),
-        // metadata útil (no confiar ciegamente en cliente)
+        nombre: sanitizeInput(form.nombre),
+        email: validateEmail(form.email).sanitized,
+        asunto: sanitizeInput(form.asunto),
+        mensaje: sanitizeInput(form.mensaje),
         meta: {
           ua: navigator.userAgent,
           tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -83,8 +204,6 @@ export default function Contacto() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Si implementas CSRF en backend, agrega aquí el header/token
-          // "X-CSRF-Token": getCsrfToken()
         },
         body: JSON.stringify(payload),
       });
@@ -101,7 +220,10 @@ export default function Contacto() {
         confirmButtonColor: "#450d82",
       });
 
+      // Resetear formulario
       setForm({ nombre: "", email: "", asunto: "", mensaje: "", hp: "" });
+      setTouched({ nombre: false, email: false, asunto: false, mensaje: false });
+      setValidationErrors({ nombre: [], email: [], asunto: [], mensaje: [] });
     } catch (error) {
       Swal.fire({
         icon: "error",
@@ -158,60 +280,94 @@ export default function Contacto() {
             />
 
             <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Nombre</label>
-                <input
-                  name="nombre"
-                  value={form.nombre}
-                  onChange={onChange}
-                  required
-                  maxLength={80}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-[#450d82] outline-none"
-                  placeholder="Tu nombre"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Correo electrónico</label>
-                <input
-                  type="email"
-                  name="email"
-                  value={form.email}
-                  onChange={onChange}
-                  required
-                  maxLength={120}
-                  className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-[#450d82] outline-none"
-                  placeholder="tucorreo@ejemplo.com"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1">Asunto</label>
-              <input
-                name="asunto"
-                value={form.asunto}
+              <ValidatedInput
+                label="Nombre"
+                type="text"
+                name="nombre"
+                value={form.nombre}
                 onChange={onChange}
+                onBlur={handleBlur}
+                placeholder="Tu nombre"
+                errors={validationErrors.nombre}
+                touched={touched.nombre}
                 required
-                maxLength={120}
-                className="w-full rounded-xl border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-[#450d82] outline-none"
-                placeholder="Consulta, cambio de vuelo, reembolso…"
+                maxLength={50}
+                autoComplete="name"
+              />
+
+              <ValidatedInput
+                label="Correo electrónico"
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={onChange}
+                onBlur={handleBlur}
+                placeholder="tucorreo@ejemplo.com"
+                errors={validationErrors.email}
+                touched={touched.email}
+                required
+                maxLength={100}
+                autoComplete="email"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-1">Mensaje</label>
-              <textarea
-                name="mensaje"
-                value={form.mensaje}
-                onChange={onChange}
-                required
-                rows={6}
-                maxLength={4000}
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 focus:ring-2 focus:ring-[#450d82] outline-none resize-y"
-                placeholder="Cuéntanos tu caso con el mayor detalle posible."
-              />
+            <ValidatedInput
+              label="Asunto"
+              type="text"
+              name="asunto"
+              value={form.asunto}
+              onChange={onChange}
+              onBlur={handleBlur}
+              placeholder="Consulta, cambio de vuelo, reembolso…"
+              errors={validationErrors.asunto}
+              touched={touched.asunto}
+              required
+              maxLength={120}
+            />
+
+            <div className="w-full">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mensaje
+                <span className="text-red-500 ml-1">*</span>
+              </label>
+              <div className="relative">
+                <textarea
+                  name="mensaje"
+                  value={form.mensaje}
+                  onChange={onChange}
+                  onBlur={handleBlur}
+                  required
+                  rows={6}
+                  maxLength={4000}
+                  className={`
+                    w-full px-4 py-3 border rounded-lg 
+                    focus:ring-2 focus:border-transparent outline-none
+                    transition-colors duration-200 resize-y
+                    ${touched.mensaje && validationErrors.mensaje.length > 0
+                      ? "border-red-500 focus:ring-red-500"
+                      : touched.mensaje && form.mensaje
+                        ? "border-green-500 focus:ring-green-500"
+                        : "border-gray-300 focus:ring-purple-600"
+                    }
+                  `}
+                  placeholder="Cuéntanos tu caso con el mayor detalle posible."
+                />
+              </div>
+
+              {/* Mensajes de error */}
+              {touched.mensaje && validationErrors.mensaje.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {validationErrors.mensaje.map((error, index) => (
+                    <p key={index} className="text-xs text-red-600 flex items-start">
+                      <span className="mr-1">•</span>
+                      <span>{error}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
+
               <p className="text-xs text-gray-500 mt-1">
-                Máx. 4000 caracteres. No adjuntes datos sensibles.
+                {form.mensaje.length} / 4000 caracteres. No adjuntes datos sensibles.
               </p>
             </div>
 

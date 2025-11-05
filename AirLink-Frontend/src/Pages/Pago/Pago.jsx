@@ -20,7 +20,7 @@ const safeParse = (k) => {
   }
 };
 
-const pickFirst = (...vals) => vals.find((v) => v != null) ?? null;
+const pickFirst = (...vals) => vals.find(Boolean) || null;
 
 /* =========================
    Componente
@@ -233,7 +233,7 @@ export default function Pago() {
           }
         : null,
       buses: skipBus ? [] : selectedBuses,
-      total,
+      total: totalVuelo + (skipBus ? 0 : totalBuses),
       pasajero: passengerData,
     };
   }, [vueloNorm, tarifaNorm, totalVuelo, selectedBuses, skipBus, total, passengerData]);
