@@ -4,7 +4,15 @@ import airlinkLogo from '../assets/airlinkLogo2.png';
 import { GoogleLogin } from "@react-oauth/google";
 import { jwtDecode } from "jwt-decode";
 import axios from "axios";
+import ValidatedInput from './ValidatedInput';
 import VerificationModal from './VerificationModal';
+import {
+    validateUsername,
+    validateEmail,
+    validatePassword,
+    validatePasswordMatch,
+    getPasswordStrength
+} from '../utils/validators';
 
 const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
     const modalRef = useRef(null);
@@ -17,7 +25,9 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
         contrasena: '',
         confirmarContrasena: ''
     });
-    const [error, setError] = useState('');
+    const [touchedFields, setTouchedFields] = useState({});
+    const [fieldErrors, setFieldErrors] = useState({});
+    const [generalError, setGeneralError] = useState('');
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -59,60 +69,142 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                 contrasena: '',
                 confirmarContrasena: ''
             });
-            setError('');
+            setTouchedFields({});
+            setFieldErrors({});
+            setGeneralError('');
         }
     }, [isOpen]);
 
     if (!isOpen) return null;
 
     const handleInputChange = (e) => {
-        setFormData({
-            ...formData,
-            [e.target.name]: e.target.value
+        const { name, value } = e.target;
+
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+
+        // Validar en tiempo real solo si el campo ya fue tocado
+        if (touchedFields[name]) {
+            validateField(name, value);
+        }
+
+        setGeneralError('');
+    };
+
+    const handleBlur = (e) => {
+        const { name, value } = e.target;
+
+        setTouchedFields(prev => ({
+            ...prev,
+            [name]: true
+        }));
+
+        validateField(name, value);
+    };
+
+    const validateField = (name, value) => {
+        let validation;
+
+        switch (name) {
+            case 'nombreUsuario':
+                validation = validateUsername(value);
+                break;
+            case 'email':
+                validation = validateEmail(value);
+                break;
+            case 'contrasena':
+                validation = validatePassword(value);
+                // También revalidar confirmación si ya fue tocada
+                if (touchedFields.confirmarContrasena) {
+                    const matchValidation = validatePasswordMatch(value, formData.confirmarContrasena);
+                    setFieldErrors(prev => ({
+                        ...prev,
+                        confirmarContrasena: matchValidation.errors
+                    }));
+                }
+                break;
+            case 'confirmarContrasena':
+                validation = validatePasswordMatch(formData.contrasena, value);
+                break;
+            default:
+                validation = { errors: [] };
+        }
+
+        setFieldErrors(prev => ({
+            ...prev,
+            [name]: validation.errors
+        }));
+
+        return validation.isValid;
+    };
+
+    const validateAllFields = () => {
+        const fields = ['nombreUsuario', 'email', 'contrasena', 'confirmarContrasena'];
+        const newTouchedFields = {};
+        const newFieldErrors = {};
+        let isValid = true;
+
+        fields.forEach(field => {
+            newTouchedFields[field] = true;
+            const value = formData[field];
+            let validation;
+
+            switch (field) {
+                case 'nombreUsuario':
+                    validation = validateUsername(value);
+                    break;
+                case 'email':
+                    validation = validateEmail(value);
+                    break;
+                case 'contrasena':
+                    validation = validatePassword(value);
+                    break;
+                case 'confirmarContrasena':
+                    validation = validatePasswordMatch(formData.contrasena, value);
+                    break;
+                default:
+                    validation = { errors: [] };
+            }
+
+            newFieldErrors[field] = validation.errors;
+            if (!validation.isValid) isValid = false;
         });
-        setError('');
+
+        setTouchedFields(newTouchedFields);
+        setFieldErrors(newFieldErrors);
+
+        return isValid;
     };
 
     const handleRegister = async (e) => {
         e.preventDefault();
-        setError('');
+        setGeneralError('');
 
-        // Validaciones
-        if (!formData.nombreUsuario || !formData.email || !formData.contrasena || !formData.confirmarContrasena) {
-            setError('Todos los campos son obligatorios');
-            return;
-        }
-
-        if (formData.contrasena !== formData.confirmarContrasena) {
-            setError('Las contraseñas no coinciden');
-            return;
-        }
-
-        if (formData.contrasena.length < 6) {
-            setError('La contraseña debe tener al menos 6 caracteres');
-            return;
-        }
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(formData.email)) {
-            setError('Email inválido');
+        // Validar todos los campos
+        if (!validateAllFields()) {
+            setGeneralError('Por favor corrige los errores antes de continuar');
             return;
         }
 
         setLoading(true);
 
         try {
-            await axios.post("http://localhost:5174/auth/register", {
-                nombreUsuario: formData.nombreUsuario,
-                email: formData.email,
-                contrasena: formData.contrasena,
-            });
+            // Sanitizar datos antes de enviar
+            const cleanData = {
+                nombreUsuario: validateUsername(formData.nombreUsuario).sanitized,
+                email: validateEmail(formData.email).sanitized,
+                contrasena: formData.contrasena
+            };
+
+            await axios.post("http://localhost:5174/auth/register", cleanData);
 
             // Guardar email y mostrar modal de verificación
-            setRegisteredEmail(formData.email);
+            setRegisteredEmail(cleanData.email);
             setShowVerification(true);
         } catch (err) {
-            setError(err.response?.data?.message || "Error en el registro");
+            setGeneralError(err.response?.data?.message || "Error en el registro");
         } finally {
             setLoading(false);
         }
@@ -144,22 +236,24 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
             onClose();
             window.location.reload();
         } catch (err) {
-            setError(err.response?.data?.message || "Error en registro con Google");
+            setGeneralError(err.response?.data?.message || "Error en registro con Google");
         }
     };
+
+    const passwordStrength = getPasswordStrength(formData.contrasena);
 
     return (
         <>
             <div className="fixed inset-0 flex items-center justify-center z-[60] p-4" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
                 <div
                     ref={modalRef}
-                    className="bg-white rounded-lg shadow-xl max-w-md w-full p-8 relative"
+                    className="bg-white rounded-lg shadow-xl max-w-md w-full p-8 relative max-h-[90vh] overflow-y-auto"
                     style={{ animation: 'fadeIn 0.2s ease-out' }}
                 >
                     <button
                         onClick={onClose}
                         aria-label="Cerrar modal"
-                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors z-10"
                     >
                         <X className="h-5 w-5" />
                     </button>
@@ -185,72 +279,78 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                                 <div className="w-full">
                                     <GoogleLogin
                                         onSuccess={handleGoogleSuccess}
-                                        onError={() => setError("❌ Error en registro con Google")}
+                                        onError={() => setGeneralError("❌ Error en registro con Google")}
                                     />
                                 </div>
                             </>
                         ) : (
                             <>
                                 <form onSubmit={handleRegister} className="w-full space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Nombre de usuario
-                                        </label>
-                                        <input
-                                            type="text"
-                                            name="nombreUsuario"
-                                            value={formData.nombreUsuario}
-                                            onChange={handleInputChange}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                                            placeholder="Tu nombre"
-                                        />
-                                    </div>
+                                    <ValidatedInput
+                                        label="Nombre de usuario"
+                                        type="text"
+                                        name="nombreUsuario"
+                                        value={formData.nombreUsuario}
+                                        onChange={handleInputChange}
+                                        onBlur={handleBlur}
+                                        placeholder="tu_nombre"
+                                        errors={fieldErrors.nombreUsuario || []}
+                                        touched={touchedFields.nombreUsuario}
+                                        maxLength={30}
+                                        required
+                                        autoComplete="username"
+                                    />
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Email
-                                        </label>
-                                        <input
-                                            type="email"
-                                            name="email"
-                                            value={formData.email}
-                                            onChange={handleInputChange}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                                            placeholder="tu@email.com"
-                                        />
-                                    </div>
+                                    <ValidatedInput
+                                        label="Email"
+                                        type="email"
+                                        name="email"
+                                        value={formData.email}
+                                        onChange={handleInputChange}
+                                        onBlur={handleBlur}
+                                        placeholder="tu@email.com"
+                                        errors={fieldErrors.email || []}
+                                        touched={touchedFields.email}
+                                        maxLength={100}
+                                        required
+                                        autoComplete="email"
+                                    />
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Contraseña
-                                        </label>
-                                        <input
-                                            type="password"
-                                            name="contrasena"
-                                            value={formData.contrasena}
-                                            onChange={handleInputChange}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                                            placeholder="Mínimo 6 caracteres"
-                                        />
-                                    </div>
+                                    <ValidatedInput
+                                        label="Contraseña"
+                                        type="password"
+                                        name="contrasena"
+                                        value={formData.contrasena}
+                                        onChange={handleInputChange}
+                                        onBlur={handleBlur}
+                                        placeholder="Crea una contraseña segura"
+                                        errors={fieldErrors.contrasena || []}
+                                        touched={touchedFields.contrasena}
+                                        showPasswordStrength={true}
+                                        passwordStrength={passwordStrength}
+                                        maxLength={128}
+                                        required
+                                        autoComplete="new-password"
+                                    />
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Confirmar contraseña
-                                        </label>
-                                        <input
-                                            type="password"
-                                            name="confirmarContrasena"
-                                            value={formData.confirmarContrasena}
-                                            onChange={handleInputChange}
-                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-600 focus:border-transparent outline-none"
-                                            placeholder="Repite tu contraseña"
-                                        />
-                                    </div>
+                                    <ValidatedInput
+                                        label="Confirmar contraseña"
+                                        type="password"
+                                        name="confirmarContrasena"
+                                        value={formData.confirmarContrasena}
+                                        onChange={handleInputChange}
+                                        onBlur={handleBlur}
+                                        placeholder="Repite tu contraseña"
+                                        errors={fieldErrors.confirmarContrasena || []}
+                                        touched={touchedFields.confirmarContrasena}
+                                        maxLength={128}
+                                        required
+                                        autoComplete="new-password"
+                                    />
 
-                                    {error && (
+                                    {generalError && (
                                         <div className="text-red-600 text-sm text-center bg-red-50 py-2 px-3 rounded">
-                                            {error}
+                                            {generalError}
                                         </div>
                                     )}
 
@@ -264,7 +364,11 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
 
                                     <button
                                         type="button"
-                                        onClick={() => setShowEmailForm(false)}
+                                        onClick={() => {
+                                            setShowEmailForm(false);
+                                            setTouchedFields({});
+                                            setFieldErrors({});
+                                        }}
                                         className="w-full text-gray-600 hover:text-gray-800 text-sm font-medium"
                                     >
                                         ← Volver
@@ -300,17 +404,17 @@ const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }) => {
                 </div>
 
                 <style>{`
-                    @keyframes fadeIn {
-                        from {
-                            opacity: 0;
-                            transform: scale(0.95);
-                        }
-                        to {
-                            opacity: 1;
-                            transform: scale(1);
-                        }
-                    }
-                `}</style>
+          @keyframes fadeIn {
+            from {
+              opacity: 0;
+              transform: scale(0.95);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1);
+            }
+          }
+        `}</style>
             </div>
 
             {/* Modal de verificación */}
