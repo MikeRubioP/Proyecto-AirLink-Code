@@ -12,6 +12,9 @@ const router = express.Router();
 // ========================================
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+// CLP es moneda sin decimales en Stripe
+const toUnitAmountCLP = (v) => Math.round(Number(v || 0));
+
 // ========================================
 // CONFIGURACIÓN DE PAYPAL
 // ========================================
@@ -43,46 +46,42 @@ function generarCodigoReserva() {
 // ========================================
 router.post("/crear-reserva", async (req, res) => {
   const db = req.app.get("db");
-  const { pasajero, buses, total, metodoPago } = req.body;
+  const { pasajero, vuelo = null, buses = [], total, metodoPago } = req.body;
 
   let connection;
 
   try {
-    // Validar datos
-    if (!pasajero || !buses || buses.length === 0 || !total) {
+    // Validaciones mínimas
+    if (!pasajero || !total) {
       return res.status(400).json({
         error: "Datos incompletos",
-        required: ["pasajero", "buses", "total"],
+        required: ["pasajero", "total"],
       });
     }
 
-    // Validar que los buses tengan IDs de viaje
-    const viajeIds = buses.map((bus) => bus.id).filter((id) => id);
-    if (viajeIds.length === 0) {
-      return res.status(400).json({
-        error: "Los buses deben tener IDs de viaje válidos",
-      });
+    // Debe haber al menos un item: vuelo o buses
+    if (!vuelo && (!buses || buses.length === 0)) {
+      return res.status(400).json({ error: "No hay items de reserva." });
+    }
+
+    // Determinar idViaje para la reserva (vuelo o primer bus)
+    const primerViajeId =
+      (vuelo && vuelo.idViaje) || (Array.isArray(buses) && buses[0]?.id) || null;
+
+    if (!primerViajeId) {
+      return res.status(400).json({ error: "Falta id de viaje (vuelo o bus)." });
     }
 
     connection = await db.getConnection();
     await connection.beginTransaction();
 
     // Mapear método de pago a ID
-    const metodoPagoMap = {
-      stripe: 1,
-      mercadopago: 2,
-      paypal: 4,
-    };
-
+    const metodoPagoMap = { stripe: 1, mercadopago: 2, paypal: 4 };
     const idMetodoPago = metodoPagoMap[metodoPago] || 1;
 
-    // Usuario por defecto
+    // Usuario por defecto (ajústalo si corresponde)
     const idUsuario = 1;
 
-    // Obtener el primer viaje para la reserva
-    const primerViajeId = viajeIds[0];
-
-    // Generar código de reserva único
     const codigoReserva = generarCodigoReserva();
 
     // Insertar reserva principal
@@ -95,23 +94,22 @@ router.post("/crear-reserva", async (req, res) => {
 
     const reservaId = reservaResult.insertId;
 
-    // Insertar pasajero asociado a la reserva
+    // Insertar pasajero asociado
     const [pasajeroResult] = await connection.query(
       `INSERT INTO pasajero 
         (idReserva, nombrePasajero, apellidoPasajero, documento, tipo_documento, fecha_nacimiento, nacionalidad)
-        VALUES (?, ?, ?, ?, 'DNI', ?, 'CL')`,
+        VALUES (?, ?, ?, ?, ?, ?, 'CL')`,
       [
         reservaId,
         pasajero.nombre,
         pasajero.apellido,
         pasajero.numeroDocumento,
+        pasajero.tipoDocumento || 'DNI',
         pasajero.fechaNacimiento || null,
       ]
     );
 
-    const idPasajero = pasajeroResult.insertId;
-
-    // Insertar registro de pago pendiente
+    // Registro de pago pendiente
     await connection.query(
       `INSERT INTO pago 
         (idReserva, idMetodoPago, idEstadoPago, monto, moneda, created_at)
@@ -125,7 +123,7 @@ router.post("/crear-reserva", async (req, res) => {
       success: true,
       reservaId,
       codigoReserva,
-      pasajeroId: idPasajero,
+      pasajeroId: pasajeroResult.insertId,
       message: "Reserva creada exitosamente",
     });
   } catch (error) {
@@ -141,105 +139,112 @@ router.post("/crear-reserva", async (req, res) => {
 });
 
 // ========================================
-// STRIPE - CREAR SESIÓN DE PAGO
+// STRIPE - CREAR SESIÓN DE PAGO (vuelo + buses)
 // ========================================
 router.post("/stripe/create-session", async (req, res) => {
-  const { buses, reservaId, pasajero } = req.body;
+  const { reservaId, pasajero, vuelo = null, buses = [] } = req.body;
 
   try {
-    const lineItems = buses.map((bus) => ({
-      price_data: {
-        currency: "clp",
-        product_data: {
-          name: `${bus.empresa} - ${bus.origen} a ${bus.destino}`,
-          description: `Salida: ${bus.horaSalida} - Llegada: ${bus.horaLlegada}`,
+    const line_items = [];
+
+    // Vuelo (opcional)
+    if (vuelo && Number(vuelo.precio) > 0) {
+      line_items.push({
+        price_data: {
+          currency: "clp",
+          product_data: {
+            name: `Vuelo ${vuelo.origen} → ${vuelo.destino} · ${vuelo.tarifaNombre}`,
+          },
+          unit_amount: toUnitAmountCLP(vuelo.precio),
         },
-        unit_amount: Math.round(bus.precioAdulto),
-      },
-      quantity: 1,
-    }));
+        quantity: 1,
+      });
+    }
+
+    // Buses (0..n)
+    for (const b of buses || []) {
+      const amount = toUnitAmountCLP(b.precioAdulto);
+      if (amount <= 0) continue;
+      line_items.push({
+        price_data: {
+          currency: "clp",
+          product_data: {
+            name: `${b.empresa} – ${b.origen} → ${b.destino}`,
+            description: b.horaSalida && b.horaLlegada ? `Salida: ${b.horaSalida} - Llegada: ${b.horaLlegada}` : undefined,
+          },
+          unit_amount: amount,
+        },
+        quantity: 1,
+      });
+    }
+
+    if (line_items.length === 0) {
+      return res.status(400).json({ error: "No hay items para cobrar." });
+    }
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: lineItems,
       mode: "payment",
-      success_url: `http://localhost:5173/pago-exitoso?reservaId=${reservaId}&status=success`,
-      cancel_url: `http://localhost:5173/pago?status=cancel&reservaId=${reservaId}`,
-      customer_email: pasajero.correo,
+      payment_method_types: ["card"],
+      line_items,
+      customer_email: pasajero?.correo,
+      success_url: `http://localhost:5173/pago-exitoso?reservaId=${encodeURIComponent(reservaId)}&status=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `http://localhost:5173/pago?status=cancel&reservaId=${encodeURIComponent(reservaId)}`,
       metadata: {
-        reservaId: reservaId.toString(),
-        pasajeroNombre: `${pasajero.nombre} ${pasajero.apellido}`,
+        reservaId: String(reservaId || ""),
+        pasajeroNombre: pasajero ? `${pasajero.nombre || ""} ${pasajero.apellido || ""}`.trim() : "",
       },
     });
 
-    res.status(200).json({
-      success: true,
-      sessionId: session.id,
-      url: session.url,
-    });
+    res.status(200).json({ success: true, sessionId: session.id, url: session.url });
   } catch (error) {
     console.error("Error en Stripe:", error);
-    res.status(500).json({
-      error: "Error al crear sesión de Stripe",
-      details: error.message,
-    });
+    res.status(500).json({ error: "Error al crear sesión de Stripe", details: error.message });
   }
 });
 
 // ========================================
-// MERCADO PAGO - CREAR PREFERENCIA
+// MERCADO PAGO - CREAR PREFERENCIA (vuelo + buses)
 // ========================================
 router.post("/mercadopago/create-preference", async (req, res) => {
   try {
-    const { buses, reservaId, pasajero } = req.body;
+    const { vuelo = null, buses = [], reservaId, pasajero } = req.body;
 
-    console.log("📦 Datos recibidos para MercadoPago:", {
-      buses,
-      reservaId,
-      pasajero,
-    });
-
-    // Validar datos recibidos
-    if (!buses || !Array.isArray(buses) || buses.length === 0) {
-      return res.status(400).json({
-        error: "Buses inválidos o vacíos",
-        received: buses,
-      });
+    if (!vuelo && (!buses || buses.length === 0)) {
+      return res.status(400).json({ error: "No hay items para cobrar." });
     }
-
-    if (!reservaId) {
-      return res.status(400).json({ error: "reservaId es requerido" });
-    }
-
+    if (!reservaId) return res.status(400).json({ error: "reservaId es requerido" });
     if (!pasajero || !pasajero.nombre || !pasajero.correo) {
-      return res.status(400).json({
-        error: "Datos de pasajero incompletos",
-        received: pasajero,
+      return res.status(400).json({ error: "Datos de pasajero incompletos" });
+    }
+
+    const preference = new Preference(mpClient);
+    const items = [];
+
+    if (vuelo && Number(vuelo.precio) > 0) {
+      items.push({
+        title: `Vuelo ${vuelo.origen} → ${vuelo.destino} · ${vuelo.tarifaNombre}`,
+        quantity: 1,
+        currency_id: "CLP",
+        unit_price: Number(vuelo.precio),
       });
     }
 
-    // Crear instancia de Preference
-    const preference = new Preference(mpClient);
+    for (const b of buses || []) {
+      items.push({
+        title: `${b.empresa} – ${b.origen} → ${b.destino}`,
+        quantity: 1,
+        currency_id: "CLP",
+        unit_price: Number(b.precioAdulto || 0),
+      });
+    }
 
-    // Preparar los items
-    const items = buses.map((bus) => ({
-      title: `${bus.empresa} - ${bus.origen} → ${bus.destino}`,
-      quantity: 1,
-      currency_id: "CLP",
-      unit_price: Number(bus.precioAdulto),
-    }));
-
-    console.log("🎫 Items preparados:", items);
-
-    // Crear la preferencia - SIN auto_return para evitar el error
     const preferenceData = {
-      items: items,
+      items,
       back_urls: {
         success: `http://localhost:5173/pago-exitoso?reservaId=${reservaId}&status=success`,
         failure: `http://localhost:5173/pago-exitoso?reservaId=${reservaId}&status=failure`,
         pending: `http://localhost:5173/pago-exitoso?reservaId=${reservaId}&status=pending`,
       },
-      // Removemos auto_return temporalmente para que funcione
       external_reference: String(reservaId),
       statement_descriptor: "AIRLINK",
       payer: {
@@ -249,25 +254,10 @@ router.post("/mercadopago/create-preference", async (req, res) => {
       },
     };
 
-    console.log(
-      "📝 Preferencia a crear:",
-      JSON.stringify(preferenceData, null, 2)
-    );
-
     const response = await preference.create({ body: preferenceData });
-
-    console.log("✅ Respuesta de MercadoPago:", response);
-
-    // Retornar el init_point
-    res.json({
-      success: true,
-      init_point: response.init_point,
-      id: response.id,
-    });
+    res.json({ success: true, init_point: response.init_point, id: response.id });
   } catch (error) {
     console.error("❌ Error completo de MercadoPago:", error);
-    console.error("Stack:", error.stack);
-
     res.status(500).json({
       error: "Error al crear preferencia de Mercado Pago",
       message: error.message,
@@ -277,15 +267,41 @@ router.post("/mercadopago/create-preference", async (req, res) => {
 });
 
 // ========================================
-// PAYPAL - CREAR ORDEN
+// PAYPAL - CREAR ORDEN (vuelo + buses)
 // ========================================
 router.post("/paypal/create-order", async (req, res) => {
-  const { buses, reservaId, pasajero } = req.body;
+  const { vuelo = null, buses = [], reservaId, pasajero } = req.body;
 
   try {
-    const conversionRate = 900;
-    const totalCLP = buses.reduce((sum, bus) => sum + bus.precioAdulto, 0);
+    if (!vuelo && (!buses || buses.length === 0)) {
+      return res.status(400).json({ error: "No hay items para cobrar." });
+    }
+
+    const conversionRate = 900; // CLP → USD (demo)
+    const totalCLP =
+      (Number(vuelo?.precio || 0)) +
+      (buses || []).reduce((sum, b) => sum + Number(b.precioAdulto || 0), 0);
+
     const totalUSD = (totalCLP / conversionRate).toFixed(2);
+
+    const items = [];
+
+    if (vuelo && Number(vuelo.precio) > 0) {
+      items.push({
+        name: `Vuelo ${vuelo.origen} → ${vuelo.destino} · ${vuelo.tarifaNombre}`,
+        unit_amount: { currency_code: "USD", value: (Number(vuelo.precio) / conversionRate).toFixed(2) },
+        quantity: "1",
+      });
+    }
+
+    for (const b of buses || []) {
+      items.push({
+        name: `${b.empresa} – ${b.origen} → ${b.destino}`,
+        description: b.horaSalida && b.horaLlegada ? `${b.horaSalida} - ${b.horaLlegada}` : undefined,
+        unit_amount: { currency_code: "USD", value: (Number(b.precioAdulto || 0) / conversionRate).toFixed(2) },
+        quantity: "1",
+      });
+    }
 
     const request = new paypal.orders.OrdersCreateRequest();
     request.prefer("return=representation");
@@ -297,24 +313,10 @@ router.post("/paypal/create-order", async (req, res) => {
             currency_code: "USD",
             value: totalUSD,
             breakdown: {
-              item_total: {
-                currency_code: "USD",
-                value: totalUSD,
-              },
+              item_total: { currency_code: "USD", value: totalUSD },
             },
           },
-          items: buses.map((bus) => {
-            const itemPriceUSD = (bus.precioAdulto / conversionRate).toFixed(2);
-            return {
-              name: `${bus.empresa} - ${bus.origen} a ${bus.destino}`,
-              description: `${bus.horaSalida} - ${bus.horaLlegada}`,
-              unit_amount: {
-                currency_code: "USD",
-                value: itemPriceUSD,
-              },
-              quantity: "1",
-            };
-          }),
+          items,
           description: `Reserva #${reservaId}`,
         },
       ],
@@ -327,19 +329,14 @@ router.post("/paypal/create-order", async (req, res) => {
     });
 
     const order = await paypalClient.execute(request);
-
     res.status(201).json({
       success: true,
       id: order.result.id,
-      approveUrl: order.result.links.find((link) => link.rel === "approve")
-        .href,
+      approveUrl: order.result.links.find((l) => l.rel === "approve").href,
     });
   } catch (error) {
     console.error("Error en PayPal:", error);
-    res.status(500).json({
-      error: "Error al crear orden de PayPal",
-      details: error.message,
-    });
+    res.status(500).json({ error: "Error al crear orden de PayPal", details: error.message });
   }
 });
 
@@ -352,77 +349,18 @@ router.put("/actualizar-estado/:reservaId", async (req, res) => {
   const { estado } = req.body;
 
   try {
-    await db.query("UPDATE reserva SET estado = ? WHERE idReserva = ?", [
-      estado,
-      reservaId,
-    ]);
+    await db.query("UPDATE reserva SET estado = ? WHERE idReserva = ?", [estado, reservaId]);
 
-    const estadoPagoMap = {
-      confirmada: 2,
-      cancelada: 3,
-      pendiente: 1,
-    };
-
+    const estadoPagoMap = { confirmada: 2, cancelada: 3, pendiente: 1 };
     await db.query("UPDATE pago SET idEstadoPago = ? WHERE idReserva = ?", [
       estadoPagoMap[estado] || 1,
       reservaId,
     ]);
 
-    res.json({
-      success: true,
-      message: "Estado de reserva actualizado",
-    });
+    res.json({ success: true, message: "Estado de reserva actualizado" });
   } catch (error) {
     console.error("Error al actualizar estado:", error);
-    res.status(500).json({
-      error: "Error al actualizar estado de reserva",
-      details: error.message,
-    });
-  }
-});
-
-// ========================================
-// OBTENER RESERVA POR ID
-// ========================================
-router.get("/reserva/:reservaId", async (req, res) => {
-  const db = req.app.get("db");
-  const { reservaId } = req.params;
-
-  try {
-    const [reserva] = await db.query(
-      `SELECT 
-        r.*,
-        p.nombrePasajero,
-        p.apellidoPasajero,
-        p.documento,
-        v.salida,
-        v.llegada,
-        t_origen.nombreTerminal as origen,
-        t_destino.nombreTerminal as destino
-       FROM reserva r
-       LEFT JOIN pasajero p ON r.idReserva = p.idReserva
-       LEFT JOIN viaje v ON r.idViaje = v.idViaje
-       LEFT JOIN ruta ru ON v.idRuta = ru.idRuta
-       LEFT JOIN terminal t_origen ON ru.idTerminalOrigen = t_origen.idTerminal
-       LEFT JOIN terminal t_destino ON ru.idTerminalDestino = t_destino.idTerminal
-       WHERE r.idReserva = ?`,
-      [reservaId]
-    );
-
-    if (reserva.length === 0) {
-      return res.status(404).json({ error: "Reserva no encontrada" });
-    }
-
-    res.json({
-      success: true,
-      reserva: reserva[0],
-    });
-  } catch (error) {
-    console.error("Error al obtener reserva:", error);
-    res.status(500).json({
-      error: "Error al obtener reserva",
-      details: error.message,
-    });
+    res.status(500).json({ error: "Error al actualizar estado de reserva", details: error.message });
   }
 });
 
@@ -434,28 +372,16 @@ router.post("/mercadopago/webhook", async (req, res) => {
     const payment = req.query;
     console.log("🔔 Webhook MercadoPago:", payment);
 
-    // MercadoPago envía notificaciones como query params
     if (payment.type === "payment") {
       const db = req.app.get("db");
       const reservaId = payment.external_reference;
 
-      // Actualizar estado según el status del pago
       if (payment.status === "approved") {
-        await db.query(
-          "UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?",
-          [reservaId]
-        );
-        await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [
-          reservaId,
-        ]);
+        await db.query("UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?", [reservaId]);
+        await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [reservaId]);
       } else if (payment.status === "rejected") {
-        await db.query(
-          "UPDATE reserva SET estado = 'cancelada' WHERE idReserva = ?",
-          [reservaId]
-        );
-        await db.query("UPDATE pago SET idEstadoPago = 3 WHERE idReserva = ?", [
-          reservaId,
-        ]);
+        await db.query("UPDATE reserva SET estado = 'cancelada' WHERE idReserva = ?", [reservaId]);
+        await db.query("UPDATE pago SET idEstadoPago = 3 WHERE idReserva = ?", [reservaId]);
       }
     }
 
@@ -477,7 +403,6 @@ router.post(
     const webhookSecret = "whsec_tu_webhook_secret";
 
     let event;
-
     try {
       event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
@@ -487,16 +412,11 @@ router.post(
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      const reservaId = session.metadata.reservaId;
+      const reservaId = session.metadata?.reservaId;
 
       const db = req.app.get("db");
-      await db.query(
-        "UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?",
-        [reservaId]
-      );
-      await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [
-        reservaId,
-      ]);
+      await db.query("UPDATE reserva SET estado = 'confirmada' WHERE idReserva = ?", [reservaId]);
+      await db.query("UPDATE pago SET idEstadoPago = 2 WHERE idReserva = ?", [reservaId]);
     }
 
     res.json({ received: true });
