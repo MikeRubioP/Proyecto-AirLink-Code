@@ -1864,3 +1864,6 @@ WHERE e.tipoEmpresa = 'bus'
   AND NOT EXISTS (
       SELECT 1 FROM viaje_tarifa vt WHERE vt.idViaje = v.idViaje
   );
+
+INSERT INTO usuario (nombreUsuario, email, contrasena, idRol, verificado)
+VALUES ('Administrador', 'admin@airlink.com', 'admin123', 3, 1);
